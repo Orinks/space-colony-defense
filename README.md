@@ -1,15 +1,19 @@
-# Python CLI Template
+# Space Colony Defense
 
-A minimal Python CLI application template with modern Python features and type hints.
+A roguelike tower defense game where you protect your space colony from waves of alien invaders.
 
-## Clone this template
+## Overview
 
-```bash
-# Create a new project using this template
-codebuff --create python-cli my-app
-```
+Defend your space colony against increasingly difficult waves of enemies. Manage resources, upgrade defenses, and make strategic decisions about when to press forward or retreat to safety.
 
-## Getting Started
+### Key Features
+- Control a defensive turret to protect your colony
+- Fight multiple enemy types: Basic Invaders, Armored Ships, and Swarmers
+- Collect and manage resources (energy, metal, food)
+- Roguelike progression with permanent upgrades between runs
+- Progressive difficulty scaling with each wave
+
+## Development
 
 ```bash
 # Create and activate virtual environment
@@ -19,19 +23,20 @@ source .venv/bin/activate  # On Windows use: .venv\Scripts\activate
 # Install dependencies
 pip install -e ".[dev]"
 
-# Run in development mode
-python -m cli
+# Run tests
+pytest
 
 # Run type checker
 mypy cli
 
-# Build and install
-pip install build
-python -m build
-pip install dist/*.whl
+# Run the game
+python -m cli
 ```
 
 ## Project Structure
 - `cli/` - Source files
+  - `game/` - Core game logic
+    - `turret.py` - Turret movement and shooting mechanics
+    - `enemy_wave.py` - Enemy wave generation and behavior
 - `tests/` - Test files
 - `pyproject.toml` - Project configuration
