@@ -1,6 +1,7 @@
 from typing import List
 import pytest
 from cli.game.turret import Turret, Projectile, Enemy
+from cli.game.audio_service import AudioService, SoundEffect
 
 def test_turret_moves_left():
     # Arrange
@@ -57,3 +58,37 @@ def test_turret_targets_nearest_enemy():
     projectile = turret.shoot(enemies)
     # Assert
     assert projectile.target == enemies[1]  # Should target enemy at position 3
+
+def test_turret_plays_move_sound(monkeypatch):
+    # Arrange
+    played_sounds = []
+    
+    class MockAudioService:
+        def play_sound(self, effect: SoundEffect) -> None:
+            played_sounds.append(effect)
+    
+    turret = Turret(initial_position=5, audio_service=MockAudioService())
+    
+    # Act
+    turret.move_left()
+    
+    # Assert
+    assert len(played_sounds) == 1
+    assert played_sounds[0] == SoundEffect.TURRET_MOVE
+
+def test_turret_plays_shoot_sound(monkeypatch):
+    # Arrange
+    played_sounds = []
+    
+    class MockAudioService:
+        def play_sound(self, effect: SoundEffect) -> None:
+            played_sounds.append(effect)
+    
+    turret = Turret(initial_position=5, audio_service=MockAudioService())
+    
+    # Act
+    turret.shoot()
+    
+    # Assert
+    assert len(played_sounds) == 1
+    assert played_sounds[0] == SoundEffect.TURRET_SHOOT

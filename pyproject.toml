@@ -26,3 +26,7 @@ disallow_untyped_defs = true
 [tool.black]
 line-length = 88
 target-version = ['py39']
+
+[tool.poetry.group.dev.dependencies]
+pytest = "^8.3.4"
+
