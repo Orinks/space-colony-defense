@@ -11,6 +11,8 @@ from cli.game.menu_system import (
     MenuOption,
 )
 from cli.game.enemy_wave import EnemyType
+from cli.sral_wrapper import SRALEngines
+from cli.game.config import get_audio_config, save_audio_config
 
 
 class PygameAudioService(AudioService):
@@ -23,114 +25,192 @@ class PygameAudioService(AudioService):
         self.sounds: Dict[SoundEffect, Optional[pygame.mixer.Sound]] = {
             effect: None for effect in SoundEffect
         }
+        
+        # Load audio configuration
+        audio_config = get_audio_config()
+        
         # Default speech rate (words per minute): lower = slower, higher = faster
-        self.speech_rate = 150  # Changed from 180 to 150 for slower speech
+        self.speech_rate = audio_config.get("speech_rate", 150)
+        self.using_running_screen_reader = audio_config.get("use_running_screen_reader", True)
+        
+        # Update volumes from config
+        self.narration_volume = audio_config.get("narration_volume", 1.0)
+        sound_volume = audio_config.get("sound_volume", 1.0)
+        for effect in SoundEffect:
+            self.sound_volumes[effect] = sound_volume
+        
+        # Initialize audio
         self.initialize_audio()
         
         # Initialize text-to-speech engine
         self.tts_engine = None
         self.voice_speaker = None
         
-        # Try pyttsx3 first
-        try:
-            import pyttsx3
-            self.tts_engine = pyttsx3.init()
-            
-            # List available voices
-            voices = self.tts_engine.getProperty('voices')
-            print(f"Found {len(voices)} voices using pyttsx3:")
-            
-            # Find female voice - on Windows, female voices typically have "female" in their ID or name
-            female_voice = None
-            default_voice = None
-            
-            for i, voice in enumerate(voices):
-                voice_name = voice.name
-                voice_id = voice.id
-                gender = getattr(voice, 'gender', 'unknown')
-                
-                # Save the first voice as default
-                if i == 0:
-                    default_voice = voice
-                
-                # Print voice info
-                print(f"  Voice {i+1}: ID={voice_id}, Name={voice_name}, Gender={gender}")
-                
-                # Look for female voice indicators
-                if (gender == 'female' or 
-                    'female' in voice_id.lower() or 
-                    'woman' in voice_name.lower() or
-                    'zira' in voice_name.lower()):  # Microsoft Zira is a common female voice
-                    female_voice = voice
-                    print(f"  *** Detected as female voice: {voice_name} ***")
-            
-            # Set female voice if found, otherwise use default
-            if female_voice:
-                self.tts_engine.setProperty('voice', female_voice.id)
-                print(f"Set voice to female voice: {female_voice.name}")
-            else:
-                print("No female voice found, using default voice")
-            
-            # Set speech rate (default is 200)
-            self.tts_engine.setProperty('rate', self.speech_rate)
-            
-            # Set initial volume
-            self.tts_engine.setProperty('volume', self.narration_volume)
-            
-            print(f"Text-to-speech engine initialized successfully (Rate: {self.speech_rate}, Volume: {self.narration_volume})")
-            
-        except Exception as e:
-            print(f"pyttsx3 initialization failed: {e}")
-            print("Trying alternative Windows Speech API...")
-            
-            # Fall back to direct Windows Speech API if pyttsx3 fails
+        # Try SRAL first (already initialized in parent class)
+        if self.sral:
+            print("Using SRAL for text-to-speech in Pygame mode")
+        else:
+            # Try pyttsx3 if SRAL is not available
             try:
-                import win32com.client
-                self.voice_speaker = win32com.client.Dispatch("SAPI.SpVoice")
+                import pyttsx3
+                self.tts_engine = pyttsx3.init()
                 
                 # List available voices
-                voices = self.voice_speaker.GetVoices()
-                print(f"Found {voices.Count} voices using Windows Speech API:")
+                voices = self.tts_engine.getProperty('voices')
+                print(f"Found {len(voices)} voices using pyttsx3:")
                 
-                # Find female voice
-                for i in range(voices.Count):
-                    voice = voices.Item(i)
-                    voice_id = voice.Id
-                    voice_name = voice.GetDescription()
-                    print(f"  Voice {i+1}: ID={voice_id}, Name={voice_name}")
+                # Find female voice - on Windows, female voices typically have "female" in their ID or name
+                female_voice = None
+                default_voice = None
+                
+                for i, voice in enumerate(voices):
+                    voice_name = voice.name
+                    voice_id = voice.id
+                    gender = getattr(voice, 'gender', 'unknown')
+                    
+                    # Save the first voice as default
+                    if i == 0:
+                        default_voice = voice
+                    
+                    # Print voice info
+                    print(f"  Voice {i+1}: ID={voice_id}, Name={voice_name}, Gender={gender}")
                     
                     # Look for female voice indicators
-                    if ('female' in voice_name.lower() or 
-                        'woman' in voice_name.lower() or 
-                        'zira' in voice_name.lower()):
-                        self.voice_speaker.Voice = voice
-                        print(f"  *** Set to female voice: {voice_name} ***")
-                        break
+                    if (gender == 'female' or 
+                        'female' in voice_id.lower() or 
+                        'woman' in voice_name.lower() or
+                        'zira' in voice_name.lower()):  # Microsoft Zira is a common female voice
+                        female_voice = voice
+                        print(f"  *** Detected as female voice: {voice_name} ***")
                 
-                # Set rate (-10 to 10, with 0 being normal)
-                # Convert our 50-250 scale to -10 to 10 scale
-                # 150 (our default) maps to 0 (normal speed)
-                rate_normalized = int((self.speech_rate - 150) / 10)
-                self.voice_speaker.Rate = rate_normalized
+                # Set female voice if found, otherwise use default
+                if female_voice:
+                    self.tts_engine.setProperty('voice', female_voice.id)
+                    print(f"Set voice to female voice: {female_voice.name}")
+                else:
+                    print("No female voice found, using default voice")
                 
-                # Set volume (0-100)
-                self.voice_speaker.Volume = int(self.narration_volume * 100)
+                # Set speech rate (default is 200)
+                self.tts_engine.setProperty('rate', self.speech_rate)
                 
-                print(f"Windows Speech API initialized successfully (Rate: {rate_normalized}, Volume: {int(self.narration_volume * 100)})")
+                # Set initial volume
+                self.tts_engine.setProperty('volume', self.narration_volume)
+                
+                print(f"Text-to-speech engine initialized successfully (Rate: {self.speech_rate}, Volume: {self.narration_volume})")
                 
             except Exception as e:
-                print(f"Windows Speech API initialization failed: {e}")
-                print("Falling back to text-only narration")
+                print(f"pyttsx3 initialization failed: {e}")
+                print("Trying alternative Windows Speech API...")
+                
+                # Fall back to direct Windows Speech API if pyttsx3 fails
+                try:
+                    import win32com.client
+                    self.voice_speaker = win32com.client.Dispatch("SAPI.SpVoice")
+                    
+                    # List available voices
+                    voices = self.voice_speaker.GetVoices()
+                    print(f"Found {voices.Count} voices using Windows Speech API:")
+                    
+                    # Find female voice
+                    for i in range(voices.Count):
+                        voice = voices.Item(i)
+                        voice_id = voice.Id
+                        voice_name = voice.GetDescription()
+                        print(f"  Voice {i+1}: ID={voice_id}, Name={voice_name}")
+                        
+                        # Look for female voice indicators
+                        if ('female' in voice_name.lower() or 
+                            'woman' in voice_name.lower() or 
+                            'zira' in voice_name.lower()):
+                            self.voice_speaker.Voice = voice
+                            print(f"  *** Set to female voice: {voice_name} ***")
+                            break
+                    
+                    # Set rate (-10 to 10, with 0 being normal)
+                    # Convert our 50-250 scale to -10 to 10 scale
+                    # 150 (our default) maps to 0 (normal speed)
+                    rate_normalized = int((self.speech_rate - 150) / 10)
+                    self.voice_speaker.Rate = rate_normalized
+                    
+                    # Set volume (0-100)
+                    self.voice_speaker.Volume = int(self.narration_volume * 100)
+                    
+                    print(f"Windows Speech API initialized successfully (Rate: {rate_normalized}, Volume: {int(self.narration_volume * 100)})")
+                    
+                except Exception as e:
+                    print(f"Windows Speech API initialization failed: {e}")
+                    print("Falling back to text-only narration")
         
         print("Speech rate can be adjusted with + and - keys")
         print("Sound volume can be adjusted with [ and ] keys")
         print("Narration volume can be adjusted with { and } keys")
+    
+    def toggle_running_screen_reader(self, use_running_sr: bool) -> None:
+        """Toggle between using SRAL directly or using the running screen reader"""
+        if self.using_running_screen_reader == use_running_sr:
+            # No change needed
+            return
+            
+        self.using_running_screen_reader = use_running_sr
+        
+        # Save the configuration
+        from cli.game.config import get_audio_config, save_audio_config
+        audio_config = get_audio_config()
+        audio_config["use_running_screen_reader"] = use_running_sr
+        save_audio_config(audio_config)
+        
+        # Clean up existing SRAL instance if any
+        if self.sral:
+            # SRAL will clean up in its own __del__ method
+            self.sral = None
+            
+        # Initialize a new SRAL instance with the appropriate settings
+        try:
+            import sral
+            from cli.sral_wrapper import SRALEngines
+            
+            if self.using_running_screen_reader:
+                # Initialize SRAL with engines_exclude=0 to use the running screen reader
+                # This will make SRAL use the currently active screen reader
+                self.sral = sral.Sral(engines_exclude=0)
+                print("SRAL initialized to use running screen reader")
+                self.play_narration("Using running screen reader")
+            else:
+                # Initialize SRAL to use SAPI specifically
+                # Use the SAPI constant from SRALEngines
+                self.sral = sral.Sral(engines_exclude=(SRALEngines.NVDA | SRALEngines.JAWS | SRALEngines.SPEECH_DISPATCHER | 
+                                                      SRALEngines.UIA | SRALEngines.AV_SPEECH | SRALEngines.NARRATOR))
+                # This effectively means "use only SAPI"
+                print("SRAL initialized to use SAPI direct speech")
+                self.play_narration("Using SAPI direct speech")
+        except Exception as e:
+            print(f"Error reinitializing SRAL: {e}")
+            self.play_narration("Failed to change screen reader mode")
     
     def set_speech_rate(self, rate: int) -> None:
         """Set the speech rate (words per minute)"""
         # Keep rate within reasonable bounds (50-250)
         self.speech_rate = max(50, min(250, rate))
         
+        # Save the configuration
+        from cli.game.config import get_audio_config, save_audio_config
+        audio_config = get_audio_config()
+        audio_config["speech_rate"] = self.speech_rate
+        save_audio_config(audio_config)
+        
+        # Try SRAL first
+        if self.sral:
+            try:
+                self.sral.set_rate(self.speech_rate)
+                print(f"Speech rate set to {self.speech_rate}")
+                
+                # Announce the new rate
+                self.play_narration(f"Speech rate {self.speech_rate}")
+                return
+            except Exception as e:
+                print(f"Error setting SRAL speech rate: {e}")
+        
+        # Fall back to other TTS engines
         if self.tts_engine is not None:
             self.tts_engine.setProperty('rate', self.speech_rate)
             print(f"Speech rate set to {self.speech_rate}")
@@ -145,7 +225,7 @@ class PygameAudioService(AudioService):
             
             # Announce the new rate
             self.play_narration(f"Speech rate {self.speech_rate}")
-    
+
     def increase_speech_rate(self, amount: int = 10) -> None:
         """Increase the speech rate"""
         self.set_speech_rate(self.speech_rate + amount)
@@ -156,6 +236,14 @@ class PygameAudioService(AudioService):
     
     def set_voice_by_id(self, voice_id: str) -> bool:
         """Set the voice by ID"""
+        # Try SRAL first
+        if self.sral and hasattr(self.sral, 'set_voice_by_id'):
+            try:
+                return self.sral.set_voice_by_id(voice_id)
+            except Exception as e:
+                print(f"Error setting SRAL voice by ID: {e}")
+        
+        # Fall back to other TTS engines
         if self.tts_engine is None:
             return False
             
@@ -168,6 +256,14 @@ class PygameAudioService(AudioService):
     
     def set_voice_by_index(self, index: int) -> bool:
         """Set the voice by index in the voices list"""
+        # Try SRAL first
+        if self.sral and hasattr(self.sral, 'set_voice'):
+            try:
+                return self.sral.set_voice(index)
+            except Exception as e:
+                print(f"Error setting SRAL voice by index: {e}")
+        
+        # Fall back to other TTS engines
         if self.tts_engine is not None:
             try:
                 voices = self.tts_engine.getProperty('voices')
@@ -198,6 +294,23 @@ class PygameAudioService(AudioService):
     
     def set_female_voice(self) -> bool:
         """Attempt to set a female voice"""
+        # Try SRAL first if it has voice selection capabilities
+        if self.sral and hasattr(self.sral, 'get_voice_count') and hasattr(self.sral, 'set_voice'):
+            try:
+                # Look for a female voice in SRAL
+                voice_count = self.sral.get_voice_count()
+                for i in range(voice_count):
+                    voice_name = self.sral.get_voice_name(i).lower()
+                    if ('female' in voice_name or 'woman' in voice_name or 
+                        'zira' in voice_name or 'microsoft zira' in voice_name):
+                        self.sral.set_voice(i)
+                        print(f"Set SRAL voice to female voice: {self.sral.get_voice_name(i)}")
+                        return True
+                print("No female voice found in SRAL")
+            except Exception as e:
+                print(f"Error setting female voice with SRAL: {e}")
+        
+        # Fall back to other TTS engines
         if self.tts_engine is not None:
             try:
                 voices = self.tts_engine.getProperty('voices')
@@ -308,6 +421,14 @@ class PygameAudioService(AudioService):
         # Always print to console for accessibility
         print(f"Narrating: {text} at volume {self.narration_volume}")
         
+        # Try SRAL first
+        if self.sral:
+            try:
+                self.sral.speak(text)
+                return
+            except Exception as e:
+                print(f"Error with SRAL narration: {e}")
+        
         # Use text-to-speech engine if available
         if self.tts_engine is not None:
             try:
@@ -355,6 +476,12 @@ class PygameAudioService(AudioService):
         # Call the parent method to update the narration_volume property
         super().set_narration_volume(volume)
         
+        # Save the configuration
+        from cli.game.config import get_audio_config, save_audio_config
+        audio_config = get_audio_config()
+        audio_config["narration_volume"] = self.narration_volume
+        save_audio_config(audio_config)
+        
         # Also update the TTS engine if available
         if self.tts_engine is not None:
             try:
@@ -385,6 +512,13 @@ class PygameAudioService(AudioService):
         """Set volume for all sound effects"""
         for effect in SoundEffect:
             self.set_sound_volume(effect, volume)
+        
+        # Save the configuration
+        from cli.game.config import get_audio_config, save_audio_config
+        audio_config = get_audio_config()
+        audio_config["sound_volume"] = volume
+        save_audio_config(audio_config)
+        
         print(f"All sound effects set to volume {volume}")
         
         # Announce the change
@@ -392,7 +526,7 @@ class PygameAudioService(AudioService):
         
         # Play a sound to demonstrate new volume
         self.play_sound(SoundEffect.MENU_NAV)
-    
+
     def increase_sound_volume(self, amount: float = 0.1) -> None:
         """Increase sound effect volume"""
         # Get current volume (use first effect as reference)
@@ -406,6 +540,43 @@ class PygameAudioService(AudioService):
         current = self.sound_volumes.get(SoundEffect.MENU_NAV, 1.0)
         new_volume = max(0.0, current - amount)
         self.set_sound_effect_volume(new_volume)
+
+    # Override speech control methods to use SRAL if available
+    def pause_speech(self) -> None:
+        """Pause the current speech"""
+        if self.sral:
+            try:
+                self.sral.pause_speech()
+                return
+            except Exception as e:
+                print(f"Error pausing SRAL speech: {e}")
+        
+        # Fall back to parent implementation
+        super().pause_speech()
+
+    def resume_speech(self) -> None:
+        """Resume paused speech"""
+        if self.sral:
+            try:
+                self.sral.resume_speech()
+                return
+            except Exception as e:
+                print(f"Error resuming SRAL speech: {e}")
+        
+        # Fall back to parent implementation
+        super().resume_speech()
+
+    def stop_speech(self) -> None:
+        """Stop the current speech"""
+        if self.sral:
+            try:
+                self.sral.stop_speech()
+                return
+            except Exception as e:
+                print(f"Error stopping SRAL speech: {e}")
+        
+        # Fall back to parent implementation
+        super().stop_speech()
 
 
 class PygameInterface:
@@ -430,7 +601,7 @@ class PygameInterface:
         if isinstance(self.audio, PygameAudioService):
             self.audio.set_female_voice()
 
-        # Initialize game loop
+        # Initialize game loop with the configured audio service
         self.game = GameLoop(audio_service=self.audio)
 
         # Font for text rendering
@@ -500,6 +671,16 @@ class PygameInterface:
                 self.audio.decrease_narration_volume(0.1)
                 return True
         
+        # File saving controls
+        if key == pygame.K_F11:  # F11 to save a text file
+            self.save_text_file()
+            self.audio.play_narration("Text file saved to disk")
+            return True
+        elif key == pygame.K_F12:  # F12 to save a screenshot
+            self.save_screenshot()
+            self.audio.play_narration("Screenshot saved to disk")
+            return
+            
         # Main menu navigation
         if self.game.in_main_menu or self.game.is_management_phase:
             if key == pygame.K_UP:
@@ -535,6 +716,80 @@ class PygameInterface:
                 return False  # Exit the game
 
         return True  # Continue running
+        
+    def save_text_file(self) -> None:
+        """Save a text file with game state information"""
+        try:
+            import datetime
+            import os
+            
+            # Create a logs directory if it doesn't exist
+            os.makedirs("logs", exist_ok=True)
+            
+            # Generate a filename with timestamp
+            timestamp = datetime.datetime.now().strftime("%Y%m%d_%H%M%S")
+            filename = os.path.join("logs", f"game_state_{timestamp}.txt")
+            
+            # Prepare game state information
+            game_info = [
+                f"Space Colony Defense - Game State - {datetime.datetime.now().strftime('%Y-%m-%d %H:%M:%S')}",
+                f"----------------------------------------",
+                f"Wave: {self.game.game_state.wave}",
+                f"Colony Health: {self.game.game_state.colony.hp}/{self.game.game_state.colony.max_hp}",
+                f"Resources:",
+                f"  Energy: {self.game.game_state.resources.energy}",
+                f"  Metal: {self.game.game_state.resources.metal}",
+                f"  Food: {self.game.game_state.resources.food}",
+                f"Tech Points: {self.game.game_state.tech_points}",
+                f"Shield Strength: {self.game.game_state.shield_strength}",
+                f"Buildings: {len(self.game.game_state.buildings)}",
+                f"Enemies: {len(self.game.enemies)}",
+                f"Game State:",
+                f"  In Main Menu: {self.game.in_main_menu}",
+                f"  Game Running: {self.game.game_running}",
+                f"  Is Game Over: {self.game.is_game_over}",
+                f"  Is Management Phase: {self.game.is_management_phase}",
+            ]
+            
+            # Add building information
+            if self.game.game_state.buildings:
+                game_info.append(f"\nBuildings:")
+                for i, building in enumerate(self.game.game_state.buildings):
+                    game_info.append(f"  {i+1}. {building.type.display_name()} (Level: {building.level.name})")
+            
+            # Write the file
+            with open(filename, "w") as f:
+                f.write("\n".join(game_info))
+                
+            print(f"Game state saved to {filename}")
+            return
+            
+        except Exception as e:
+            print(f"Error saving text file: {e}")
+            self.audio.play_narration("Error saving text file")
+    
+    def save_screenshot(self) -> None:
+        """Save a screenshot of the current game state"""
+        try:
+            import datetime
+            import os
+            
+            # Create a screenshots directory if it doesn't exist
+            os.makedirs("screenshots", exist_ok=True)
+            
+            # Generate a filename with timestamp
+            timestamp = datetime.datetime.now().strftime("%Y%m%d_%H%M%S")
+            filename = os.path.join("screenshots", f"screenshot_{timestamp}.png")
+            
+            # Save the screenshot
+            pygame.image.save(self.screen, filename)
+            
+            print(f"Screenshot saved to {filename}")
+            return
+            
+        except Exception as e:
+            print(f"Error saving screenshot: {e}")
+            self.audio.play_narration("Error saving screenshot")
 
     def render(self) -> None:
         """Render the game state to the screen"""

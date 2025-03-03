@@ -1,5 +1,7 @@
 from enum import Enum, auto
 from typing import Dict, Optional
+import os
+import sys
 
 
 class SoundEffect(Enum):
@@ -19,12 +21,36 @@ class AudioService:
         self, enable_sounds: bool = True, enable_narration: bool = True
     ) -> None:
         """Initialize the audio service with configurable settings"""
+        # Try to load configuration
+        try:
+            from cli.game.config import get_audio_config
+            audio_config = get_audio_config()
+            enable_sounds = audio_config.get("enable_sounds", enable_sounds)
+            enable_narration = audio_config.get("enable_narration", enable_narration)
+        except ImportError:
+            # Config module not available, use defaults
+            pass
+            
         self.enable_sounds = enable_sounds
         self.enable_narration = enable_narration
         self.sound_volumes: Dict[SoundEffect, float] = {
             effect: 1.0 for effect in SoundEffect
         }
         self.narration_volume = 1.0
+        self.sral = None
+        
+        # Try to initialize SRAL, but don't crash if it fails
+        try:
+            # Try to use the direct SRAL module first
+            # By default, initialize with engines_exclude=0 to use any available engine
+            # This will make SRAL use the currently active screen reader if available,
+            # or fall back to other engines like SAPI
+            import sral
+            self.sral = sral.Sral(engines_exclude=0)
+            print("SRAL initialized to use any available speech engine")
+        except Exception as e:
+            print(f"Could not initialize SRAL using direct module: {e}")
+            print("Falling back to console output for narration")
 
     def play_sound(self, effect: SoundEffect) -> None:
         """Play a sound effect. This is a stub that will be replaced with real audio."""
@@ -35,11 +61,18 @@ class AudioService:
             print(f"Playing sound: {effect.name} at volume {volume}")
 
     def play_narration(self, text: str) -> None:
-        """Play narrated text. This is a stub that will be replaced with real audio."""
+        """Play narrated text using SRAL if available, otherwise fall back to console."""
         if self.enable_narration:
-            # In a real implementation, this would use a text-to-speech engine
-            # For example: pyttsx3.speak(text)
-            print(f"Narrating: {text} at volume {self.narration_volume}")
+            if self.sral:
+                try:
+                    # Use SRAL for text-to-speech
+                    self.sral.speak(text)
+                except Exception as e:
+                    print(f"Error using SRAL for speech: {e}")
+                    print(f"Narrating: {text} at volume {self.narration_volume}")
+            else:
+                # Fall back to console output
+                print(f"Narrating: {text} at volume {self.narration_volume}")
 
     def set_sound_volume(self, effect: SoundEffect, volume: float) -> None:
         """Set the volume for a specific sound effect (0.0 to 1.0)"""
@@ -48,6 +81,7 @@ class AudioService:
     def set_narration_volume(self, volume: float) -> None:
         """Set the volume for narration (0.0 to 1.0)"""
         self.narration_volume = max(0.0, min(1.0, volume))
+        # If SRAL supports volume control in the future, we could set it here
 
     def toggle_sounds(self, enable: Optional[bool] = None) -> None:
         """Toggle or set the enable_sounds flag"""
@@ -55,6 +89,16 @@ class AudioService:
             self.enable_sounds = enable
         else:
             self.enable_sounds = not self.enable_sounds
+            
+        # Save the configuration
+        try:
+            from cli.game.config import get_audio_config, save_audio_config
+            audio_config = get_audio_config()
+            audio_config["enable_sounds"] = self.enable_sounds
+            save_audio_config(audio_config)
+        except ImportError:
+            # Config module not available
+            pass
 
     def toggle_narration(self, enable: Optional[bool] = None) -> None:
         """Toggle or set the enable_narration flag"""
@@ -62,3 +106,56 @@ class AudioService:
             self.enable_narration = enable
         else:
             self.enable_narration = not self.enable_narration
+            if self.sral and not self.enable_narration:
+                try:
+                    # Stop any ongoing speech when disabling narration
+                    self.sral.stop_speech()
+                except Exception as e:
+                    print(f"Error stopping SRAL speech: {e}")
+                    
+        # Save the configuration
+        try:
+            from cli.game.config import get_audio_config, save_audio_config
+            audio_config = get_audio_config()
+            audio_config["enable_narration"] = self.enable_narration
+            save_audio_config(audio_config)
+        except ImportError:
+            # Config module not available
+            pass
+
+    def pause_speech(self) -> None:
+        """Pause the current speech if SRAL is available"""
+        if self.sral:
+            try:
+                self.sral.pause_speech()
+            except Exception as e:
+                print(f"Error pausing SRAL speech: {e}")
+
+    def resume_speech(self) -> None:
+        """Resume paused speech if SRAL is available"""
+        if self.sral:
+            try:
+                self.sral.resume_speech()
+            except Exception as e:
+                print(f"Error resuming SRAL speech: {e}")
+
+    def stop_speech(self) -> None:
+        """Stop the current speech if SRAL is available"""
+        if self.sral:
+            try:
+                self.sral.stop_speech()
+            except Exception as e:
+                print(f"Error stopping SRAL speech: {e}")
+
+    def set_speech_rate(self, rate: int) -> None:
+        """Set the speech rate (0-100) if SRAL is available"""
+        if self.sral:
+            try:
+                self.sral.set_rate(rate)
+            except Exception as e:
+                print(f"Error setting SRAL speech rate: {e}")
+
+    def __del__(self) -> None:
+        """Clean up resources when the service is destroyed"""
+        # SRAL handles cleanup in its own __del__ method
+        pass

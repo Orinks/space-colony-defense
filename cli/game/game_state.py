@@ -1,7 +1,7 @@
 from dataclasses import dataclass
 from cli.game.enemy_wave import Enemy, ResourceType
 from cli.game.audio_service import AudioService, SoundEffect
-from typing import Optional
+from typing import Optional, List
 
 
 @dataclass
@@ -44,6 +44,10 @@ class GameState:
         self.wave = wave
         self.tech_points = tech_points
         self.audio = audio or AudioService()
+        self.buildings: List = []
+        self.shield_strength = 0
+        self.missiles = 0
+        self.wave_skip_available = 0
 
     def collect_resource(self, enemy: Enemy) -> None:
         drop = enemy.get_resource_drop()
@@ -83,9 +87,65 @@ class GameState:
                 f"Food {'+' if delta.food > 0 else ''}{delta.food}"
             )
 
+    def add_building(self, building) -> bool:
+        """Add a new building to the colony"""
+        if building.construct(self.resources):
+            self.buildings.append(building)
+            return True
+        return False
+
+    def produce_from_buildings(self) -> None:
+        """Run production cycle for all buildings"""
+        for building in self.buildings:
+            building.produce_resources(self.resources)
+            
+            # Handle special effects
+            if building.has_special_effect():
+                if building.type.name == "SHIELD_GENERATOR":
+                    self.shield_strength = building.get_special_effect()
+                    building.apply_special_effect(self)
+                elif building.type.name == "RESEARCH_LAB":
+                    self.tech_points = building.produce_tech_points(self.tech_points)
+                elif building.type.name == "REPAIR_BAY":
+                    effect_strength = building.get_special_effect()
+                    self.colony.hp = min(self.colony.hp + effect_strength, self.colony.max_hp)
+                    building.apply_special_effect(self)
+                elif building.type.name == "MISSILE_SILO":
+                    self.missiles = building.get_special_effect()
+                    building.apply_special_effect(self)
+                elif building.type.name == "COMMAND_CENTER":
+                    self.wave_skip_available = building.get_special_effect()
+                    building.apply_special_effect(self)
+
+    def upgrade_building(self, building_index: int) -> bool:
+        """Upgrade a building if possible"""
+        if 0 <= building_index < len(self.buildings):
+            return self.buildings[building_index].upgrade(self.resources)
+        return False
+
     def check_loss(self) -> bool:
         return self.colony.hp <= 0
 
     def retreat(self) -> None:
         # Award tech points based on current wave; using integer division for simplicity.
         self.tech_points += self.wave // 2
+        
+    def skip_waves(self) -> bool:
+        """Skip waves if command center allows it"""
+        if self.wave_skip_available > 0:
+            self.wave += self.wave_skip_available
+            self.audio.play_narration(f"Command center activated. Skipping {self.wave_skip_available} waves.")
+            self.wave_skip_available = 0
+            return True
+        return False
+        
+    def fire_missile(self) -> bool:
+        """Fire a missile if available"""
+        if self.missiles > 0:
+            self.missiles -= 1
+            self.audio.play_sound(SoundEffect.ACTION_SUCCESS)
+            self.audio.play_narration(f"Missile fired! {self.missiles} missiles remaining.")
+            return True
+        self.audio.play_sound(SoundEffect.ACTION_FAIL)
+        self.audio.play_narration("No missiles available.")
+        return False

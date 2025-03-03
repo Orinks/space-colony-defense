@@ -12,6 +12,11 @@ class GameLoop:
         self.audio = audio_service or AudioService()
         self.game_running = False
         self.in_main_menu = True
+        
+        # Initialize menu system first to load configuration
+        self.menu = MenuSystem(None, self.audio)  # Temporarily pass None for game_state
+        
+        # Now reset the game with the loaded configuration
         self.reset_game()
 
     def reset_game(self) -> None:
@@ -33,7 +38,15 @@ class GameLoop:
         # Initialize other game components
         self.enemies: List[Enemy] = []
         self.projectiles: List[Projectile] = []
-        self.menu = MenuSystem(self.game_state, self.audio)
+        
+        # Update menu system with the new game state
+        if hasattr(self, 'menu'):
+            # Preserve the existing menu (and its configuration) if it exists
+            self.menu.game_state = self.game_state
+        else:
+            # Create a new menu system if it doesn't exist yet
+            self.menu = MenuSystem(self.game_state, self.audio)
+            
         self.is_game_over = False
         self.is_wave_complete = False
         self.is_management_phase = False
@@ -152,21 +165,44 @@ class GameLoop:
             # Randomly some enemies might "attack" the turret
             # In a real implementation, this would be position-based
             if enemy.type == EnemyType.ARMORED_SHIP:
-                self.turret.take_damage(10)
+                # Apply shield protection if available
+                damage = 10
+                if self.game_state.shield_strength > 0:
+                    absorbed = min(damage, self.game_state.shield_strength)
+                    damage -= absorbed
+                    self.game_state.shield_strength -= absorbed
+                    self.audio.play_narration(f"Shield absorbed {absorbed} damage")
+                
+                if damage > 0:
+                    self.turret.take_damage(damage)
 
             # If enemy reaches bottom, damage colony
             # In a real implementation, we'd check y position
             if enemy.type == EnemyType.SWARMER:
-                self.game_state.colony.hp -= 5
+                # Apply shield protection if available
+                damage = 5
+                if self.game_state.shield_strength > 0:
+                    absorbed = min(damage, self.game_state.shield_strength)
+                    damage -= absorbed
+                    self.game_state.shield_strength -= absorbed
+                    self.audio.play_narration(f"Shield absorbed {absorbed} damage")
+                
+                if damage > 0:
+                    self.game_state.colony.hp -= damage
+                    self.audio.play_sound(SoundEffect.ACTION_FAIL)
+                    self.audio.play_narration(
+                        f"Colony damaged! Health: {self.game_state.colony.hp}"
+                    )
+                
                 self.enemies.remove(enemy)
-                self.audio.play_sound(SoundEffect.ACTION_FAIL)
-                self.audio.play_narration(
-                    f"Colony damaged! Health: {self.game_state.colony.hp}"
-                )
 
     def start_management_phase(self) -> None:
         """Start the management phase between waves"""
         self.is_management_phase = True
+        
+        # Generate resources from buildings
+        self.game_state.produce_from_buildings()
+        
         self.audio.play_narration(
             "Management phase. Review your status and prepare for the next wave."
         )
@@ -183,6 +219,16 @@ class GameLoop:
         Handle player input
         Returns: True if the game should continue, False if it should exit
         """
+        if action == "pause_speech":
+            self.audio.pause_speech()
+            return True
+        elif action == "resume_speech":
+            self.audio.resume_speech()
+            return True
+        elif action == "stop_speech":
+            self.audio.stop_speech()
+            return True
+        
         if self.in_main_menu:
             # Main menu input handling
             if action == "up":
@@ -218,6 +264,13 @@ class GameLoop:
                 self.menu.navigate_down()
             elif action == "select":
                 self.menu.select_current_option()
+            elif action == "build":
+                self.menu._show_build_menu()
+            elif action == "upgrade":
+                self.menu._show_upgrade_options()
+            elif action == "skip_wave" and self.game_state.wave_skip_available > 0:
+                if self.game_state.skip_waves():
+                    self.end_management_phase()
             elif action == "menu":
                 self.in_main_menu = True
                 self.game_running = False
@@ -232,6 +285,12 @@ class GameLoop:
         elif action == "shoot":
             projectile = self.turret.shoot(self.enemies)
             self.projectiles.append(projectile)
+        elif action == "missile":
+            if self.game_state.fire_missile():
+                # Clear all enemies on screen (simplified implementation)
+                self.enemies.clear()
+                self.audio.play_sound(SoundEffect.ACTION_SUCCESS)
+                self.audio.play_narration("Missile destroyed all enemies!")
         elif action == "status":
             self.menu.query_status()
         elif action == "menu":

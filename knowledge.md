@@ -11,9 +11,8 @@ A minimal Python CLI application template with modern Python features and type h
 
 ## Environment Setup
 To activate the Poetry environment:
-1. Run `poetry env use python` to ensure the correct Python version is used
-2. Run `poetry shell` to activate the environment directly
-3. Alternatively, you can get the path with `poetry env info` and activate it manually:
+1. Run `poetry env use python` (recommended) to activate an existing environment.
+2. Alternatively, you can get the path with `poetry env info` and activate it manually (E.G):
 ```bash
 poetry env info
 "C:\Users\username\AppData\Local\pypoetry\Cache\virtualenvs\cli-xyz123-py3.12\Scripts\activate.bat"
@@ -53,5 +52,17 @@ This will check for type errors and formatting issues.
 - Tests should account for different game states and menu navigation
 
 ## Running the Game
-- Text mode: `python -m cli`
-- Pygame mode: `python -m cli --pygame`
+- Default mode: Pygame mode (runs automatically when you execute `python -m cli`)
+- Text mode: `python -m cli --text`
+
+## SRAL Integration
+- SRAL (Screen Reader Abstraction Layer) is used for accessibility
+- Do not modify SRAL-related files (sral.py, cli/sral_wrapper.py)
+- SRAL provides text-to-speech and screen reader functionality
+- The game uses SRAL for audio narration in both text mode and Pygame mode
+- SRAL works in both text mode and Pygame mode with proper fallbacks
+- When implementing TTS, always use a cascading fallback approach:
+  1. Try SRAL first
+  2. Fall back to platform-specific TTS engines (pyttsx3, Windows Speech API)
+  3. Finally fall back to console output
+- In Pygame mode, users can toggle using the running screen reader via the options menu
