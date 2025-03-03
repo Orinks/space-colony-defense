@@ -16,3 +16,7 @@ htmlcov/
 .idea/
 .vscode/
 docs/
+
+# NVDA DLL files
+nvdaControllerClient.dll
+SRAL.dll
