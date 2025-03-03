@@ -472,26 +472,39 @@ class PygameInterface:
         """Run the main game loop"""
         running = True
 
-        while running:
-            # Process events
-            for event in pygame.event.get():
-                if event.type == pygame.QUIT:
-                    running = False
-                elif event.type == pygame.KEYDOWN:
-                    running = self.handle_keydown(event.key)
+        try:
+            while running:
+                # Process events
+                for event in pygame.event.get():
+                    if event.type == pygame.QUIT:
+                        running = False
+                    elif event.type == pygame.KEYDOWN:
+                        running = self.handle_keydown(event.key)
 
-            # Update game state
-            self.game.update()
+                # Update game state
+                self.game.update()
 
-            # Render the game
-            self.render()
+                # Render the game
+                self.render()
 
-            # Cap the frame rate
-            self.clock.tick(self.fps)
+                # Cap the frame rate
+                self.clock.tick(self.fps)
 
-        # Clean up
-        pygame.quit()
-        sys.exit()
+            # Save configuration before exiting
+            self.game.save_configuration()
+            print("Configuration saved on exit")
+            
+        except Exception as e:
+            print(f"Error in game loop: {e}")
+            print("Attempting to save configuration before exit...")
+            try:
+                self.game.save_configuration()
+            except Exception as e2:
+                print(f"Failed to save configuration: {e2}")
+        finally:
+            # Clean up
+            pygame.quit()
+            sys.exit()
 
     def handle_keydown(self, key: int) -> bool:
         """Handle keyboard input"""

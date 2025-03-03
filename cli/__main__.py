@@ -82,25 +82,41 @@ def run_text_mode(voice_index: Optional[int] = None, speech_rate: int = 50) -> N
     print("\nWelcome to Space Colony Defense!")
     print("\nMAIN MENU")
     print("Commands: [up, down, select, quit]")
-    print("Game commands: [left, right, shoot, status, menu, repair, end_management, quit]")
+    print("Game commands: [left, right, shoot, status, menu, repair, end_management, save_game, quit]")
+    print("Load game commands: When in load menu, use [up, down, select] to choose a save file")
     
     running = True
-    while running:
-        command = input("\nEnter command: ").strip().lower()
-        
-        if command == "quit":
-            print("Thanks for playing!")
-            break
-        
-        # Process input
-        running = game.handle_input(command)
-        
-        # Update game state
-        game.update()
-        
-        # Check for game over
-        if game.is_game_over:
-            print("\nGame Over! Options: [restart, menu, quit]")
+    try:
+        while running:
+            command = input("\nEnter command: ").strip().lower()
+            
+            if command == "quit":
+                print("Thanks for playing!")
+                # Save configuration before exiting
+                game.save_configuration()
+                break
+            
+            # Process input
+            running = game.handle_input(command)
+            
+            # Update game state
+            game.update()
+            
+            # Check for game over
+            if game.is_game_over:
+                print("\nGame Over! Options: [restart, menu, quit]")
+    except KeyboardInterrupt:
+        # Handle Ctrl+C gracefully
+        print("\nGame interrupted. Saving configuration before exit...")
+        game.save_configuration()
+    except Exception as e:
+        # Handle unexpected errors
+        print(f"\nUnexpected error: {e}")
+        print("Attempting to save configuration before exit...")
+        try:
+            game.save_configuration()
+        except Exception as e2:
+            print(f"Failed to save configuration: {e2}")
 
 
 if __name__ == "__main__":
