@@ -20,3 +20,6 @@ docs/
 # NVDA DLL files
 nvdaControllerClient.dll
 SRAL.dll
+
+# Poetry files
+poetry.lock
