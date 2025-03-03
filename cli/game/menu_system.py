@@ -429,16 +429,12 @@ class MenuSystem:
                 # Check if we're in pygame mode
                 from cli.game.pygame_interface import PygameAudioService
                 if isinstance(self.audio, PygameAudioService):
-                    # Get current state before toggling
+                    # Get current state
                     current_state = self.audio.using_running_screen_reader
-                    # Toggle to opposite state
-                    new_state = not current_state
-                    # Update menu state to match
-                    self.use_running_screen_reader = new_state
-                    print(f"Toggling speech mode to {new_state} (running SR = {new_state})")
-                    # Apply the change to the audio service
-                    self.audio.toggle_running_screen_reader(new_state)
-                    # The narration will be played by the toggle_running_screen_reader method
+                    state_desc = "using running screen reader" if current_state else "using direct speech"
+                    self.audio.play_narration(
+                        f"{option.name.lower().replace('_', ' ')}. Currently {state_desc}"
+                    )
                 else:
                     self.audio.play_narration(
                         f"{option.name.lower().replace('_', ' ')}"

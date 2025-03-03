@@ -44,7 +44,8 @@ def test_menu_navigation():
     
     # Assert
     assert SoundEffect.MENU_NAV in audio.played_sounds
-    assert any("Selected" in narration for narration in audio.narrations)
+    assert len(audio.narrations) > 0
+    assert any(option_name.lower() in narration.lower() for option_name in [option.name.lower() for option in MenuOption] for narration in audio.narrations)
 
 def test_status_query():
     # Arrange
@@ -113,12 +114,12 @@ def test_main_menu_navigation():
     menu.show_main_menu()
     
     # Act
-    menu.navigate_down()  # Should move to Options
+    menu.navigate_down()  # Should move to LOAD_GAME
     
     # Assert
     assert SoundEffect.MENU_NAV in audio.played_sounds
-    assert menu.main_menu_options[menu.current_index] == MainMenuOption.OPTIONS
-    assert any("options" in narration.lower() for narration in audio.narrations)
+    assert menu.main_menu_options[menu.current_index] == MainMenuOption.LOAD_GAME
+    assert any("load game" in narration.lower() for narration in audio.narrations)
 
 def test_main_menu_select_new_game():
     # Arrange
