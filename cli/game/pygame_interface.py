@@ -21,30 +21,47 @@ class PygameAudioService(AudioService):
     def __init__(
         self, enable_sounds: bool = True, enable_narration: bool = True
     ) -> None:
+        # Load audio configuration before calling parent constructor
+        # This ensures the correct speech mode is used from the start
+        try:
+            from cli.game.config import get_audio_config
+            audio_config = get_audio_config()
+            enable_sounds = audio_config.get("enable_sounds", enable_sounds)
+            enable_narration = audio_config.get("enable_narration", enable_narration)
+            self.using_running_screen_reader = audio_config.get("use_running_screen_reader", True)
+            
+            # Set speech rate and volumes from config
+            self.speech_rate = audio_config.get("speech_rate", 150)
+            self.narration_volume = audio_config.get("narration_volume", 1.0)
+            sound_volume = audio_config.get("sound_volume", 1.0)
+            
+            print(f"Initializing PygameAudioService with use_running_screen_reader={self.using_running_screen_reader}")
+        except ImportError:
+            # Config module not available, use defaults
+            print("Config module not available, using default audio settings")
+            self.using_running_screen_reader = True
+            self.speech_rate = 150
+            self.narration_volume = 1.0
+            sound_volume = 1.0
+        
+        # Now call the parent constructor with the correct settings
+        # This will initialize SRAL with the appropriate speech mode
         super().__init__(enable_sounds, enable_narration)
+        
         self.sounds: Dict[SoundEffect, Optional[pygame.mixer.Sound]] = {
             effect: None for effect in SoundEffect
         }
         
-        # Load audio configuration
-        audio_config = get_audio_config()
-        
-        # Default speech rate (words per minute): lower = slower, higher = faster
-        self.speech_rate = audio_config.get("speech_rate", 150)
-        self.using_running_screen_reader = audio_config.get("use_running_screen_reader", True)
-        
         # Update volumes from config
-        self.narration_volume = audio_config.get("narration_volume", 1.0)
-        sound_volume = audio_config.get("sound_volume", 1.0)
         for effect in SoundEffect:
             self.sound_volumes[effect] = sound_volume
-        
-        # Initialize audio
-        self.initialize_audio()
         
         # Initialize text-to-speech engine
         self.tts_engine = None
         self.voice_speaker = None
+        
+        # Initialize audio
+        self.initialize_audio()
         
         # Try SRAL first (already initialized in parent class)
         if self.sral:
@@ -144,234 +161,6 @@ class PygameAudioService(AudioService):
         print("Speech rate can be adjusted with + and - keys")
         print("Sound volume can be adjusted with [ and ] keys")
         print("Narration volume can be adjusted with { and } keys")
-    
-    def toggle_running_screen_reader(self, use_running_sr: bool) -> None:
-        """Toggle between using SRAL directly or using the running screen reader"""
-        if self.using_running_screen_reader == use_running_sr:
-            # No change needed
-            return
-            
-        self.using_running_screen_reader = use_running_sr
-        
-        # Save the configuration
-        from cli.game.config import get_audio_config, save_audio_config
-        audio_config = get_audio_config()
-        audio_config["use_running_screen_reader"] = use_running_sr
-        save_audio_config(audio_config)
-        
-        # Clean up existing SRAL instance if any
-        if self.sral:
-            # SRAL will clean up in its own __del__ method
-            self.sral = None
-            
-        # Initialize a new SRAL instance with the appropriate settings
-        try:
-            import sral
-            from cli.sral_wrapper import SRALEngines
-            
-            if self.using_running_screen_reader:
-                # Initialize SRAL with engines_exclude=0 to use the running screen reader
-                # This will make SRAL use the currently active screen reader
-                self.sral = sral.Sral(engines_exclude=0)
-                print("SRAL initialized to use running screen reader")
-                self.play_narration("Using running screen reader")
-            else:
-                # Initialize SRAL to use SAPI specifically
-                # Use the SAPI constant from SRALEngines
-                self.sral = sral.Sral(engines_exclude=(SRALEngines.NVDA | SRALEngines.JAWS | SRALEngines.SPEECH_DISPATCHER | 
-                                                      SRALEngines.UIA | SRALEngines.AV_SPEECH | SRALEngines.NARRATOR))
-                # This effectively means "use only SAPI"
-                print("SRAL initialized to use SAPI direct speech")
-                self.play_narration("Using SAPI direct speech")
-        except Exception as e:
-            print(f"Error reinitializing SRAL: {e}")
-            self.play_narration("Failed to change screen reader mode")
-    
-    def set_speech_rate(self, rate: int) -> None:
-        """Set the speech rate (words per minute)"""
-        # Keep rate within reasonable bounds (50-250)
-        self.speech_rate = max(50, min(250, rate))
-        
-        # Save the configuration
-        from cli.game.config import get_audio_config, save_audio_config
-        audio_config = get_audio_config()
-        audio_config["speech_rate"] = self.speech_rate
-        save_audio_config(audio_config)
-        
-        # Try SRAL first
-        if self.sral:
-            try:
-                self.sral.set_rate(self.speech_rate)
-                print(f"Speech rate set to {self.speech_rate}")
-                
-                # Announce the new rate
-                self.play_narration(f"Speech rate {self.speech_rate}")
-                return
-            except Exception as e:
-                print(f"Error setting SRAL speech rate: {e}")
-        
-        # Fall back to other TTS engines
-        if self.tts_engine is not None:
-            self.tts_engine.setProperty('rate', self.speech_rate)
-            print(f"Speech rate set to {self.speech_rate}")
-            
-            # Announce the new rate
-            self.play_narration(f"Speech rate {self.speech_rate}")
-        elif self.voice_speaker is not None:
-            # Convert our 50-250 scale to -10 to 10 scale
-            rate_normalized = int((self.speech_rate - 150) / 10)
-            self.voice_speaker.Rate = rate_normalized
-            print(f"Speech rate set to {self.speech_rate} (Windows API rate: {rate_normalized})")
-            
-            # Announce the new rate
-            self.play_narration(f"Speech rate {self.speech_rate}")
-
-    def increase_speech_rate(self, amount: int = 10) -> None:
-        """Increase the speech rate"""
-        self.set_speech_rate(self.speech_rate + amount)
-    
-    def decrease_speech_rate(self, amount: int = 10) -> None:
-        """Decrease the speech rate"""
-        self.set_speech_rate(self.speech_rate - amount)
-    
-    def set_voice_by_id(self, voice_id: str) -> bool:
-        """Set the voice by ID"""
-        # Try SRAL first
-        if self.sral and hasattr(self.sral, 'set_voice_by_id'):
-            try:
-                return self.sral.set_voice_by_id(voice_id)
-            except Exception as e:
-                print(f"Error setting SRAL voice by ID: {e}")
-        
-        # Fall back to other TTS engines
-        if self.tts_engine is None:
-            return False
-            
-        try:
-            self.tts_engine.setProperty('voice', voice_id)
-            return True
-        except:
-            print(f"Failed to set voice with ID: {voice_id}")
-            return False
-    
-    def set_voice_by_index(self, index: int) -> bool:
-        """Set the voice by index in the voices list"""
-        # Try SRAL first
-        if self.sral and hasattr(self.sral, 'set_voice'):
-            try:
-                return self.sral.set_voice(index)
-            except Exception as e:
-                print(f"Error setting SRAL voice by index: {e}")
-        
-        # Fall back to other TTS engines
-        if self.tts_engine is not None:
-            try:
-                voices = self.tts_engine.getProperty('voices')
-                if 0 <= index < len(voices):
-                    self.tts_engine.setProperty('voice', voices[index].id)
-                    print(f"Set voice to: {voices[index].name}")
-                    return True
-                else:
-                    print(f"Voice index out of range: {index}, max: {len(voices)-1}")
-                    return False
-            except:
-                print(f"Failed to set voice with index: {index}")
-                return False
-        elif self.voice_speaker is not None:
-            try:
-                voices = self.voice_speaker.GetVoices()
-                if 0 <= index < voices.Count:
-                    self.voice_speaker.Voice = voices.Item(index)
-                    print(f"Set voice to: {voices.Item(index).GetDescription()}")
-                    return True
-                else:
-                    print(f"Voice index out of range: {index}, max: {voices.Count-1}")
-                    return False
-            except:
-                print(f"Failed to set voice with index: {index}")
-                return False
-        return False
-    
-    def set_female_voice(self) -> bool:
-        """Attempt to set a female voice"""
-        # Try SRAL first if it has voice selection capabilities
-        if self.sral and hasattr(self.sral, 'get_voice_count') and hasattr(self.sral, 'set_voice'):
-            try:
-                # Look for a female voice in SRAL
-                voice_count = self.sral.get_voice_count()
-                for i in range(voice_count):
-                    voice_name = self.sral.get_voice_name(i).lower()
-                    if ('female' in voice_name or 'woman' in voice_name or 
-                        'zira' in voice_name or 'microsoft zira' in voice_name):
-                        self.sral.set_voice(i)
-                        print(f"Set SRAL voice to female voice: {self.sral.get_voice_name(i)}")
-                        return True
-                print("No female voice found in SRAL")
-            except Exception as e:
-                print(f"Error setting female voice with SRAL: {e}")
-        
-        # Fall back to other TTS engines
-        if self.tts_engine is not None:
-            try:
-                voices = self.tts_engine.getProperty('voices')
-                
-                # First look for voices explicitly marked as female
-                for voice in voices:
-                    gender = getattr(voice, 'gender', 'unknown')
-                    if gender.lower() == 'female':
-                        self.tts_engine.setProperty('voice', voice.id)
-                        print(f"Set voice to female voice: {voice.name}")
-                        return True
-                
-                # Then try to find voices with 'female', 'woman', or 'zira' in their name/id
-                for voice in voices:
-                    voice_id = voice.id.lower()
-                    voice_name = voice.name.lower()
-                    
-                    if ('female' in voice_id or 'woman' in voice_name or 
-                        'zira' in voice_name or 'microsoft zira' in voice_name):
-                        self.tts_engine.setProperty('voice', voice.id)
-                        print(f"Set voice to likely female voice: {voice.name}")
-                        return True
-                
-                # For Microsoft SAPI5 on Windows, try voice #1 which is often female (Zira)
-                if len(voices) > 1:
-                    self.tts_engine.setProperty('voice', voices[1].id)
-                    print(f"Set voice to second voice (likely female): {voices[1].name}")
-                    return True
-                    
-                print("No female voice found")
-                return False
-            except Exception as e:
-                print(f"Error setting female voice with pyttsx3: {e}")
-                return False
-        elif self.voice_speaker is not None:
-            try:
-                voices = self.voice_speaker.GetVoices()
-                
-                # Try to find voices with 'female', 'woman', or 'zira' in their name
-                for i in range(voices.Count):
-                    voice = voices.Item(i)
-                    voice_name = voice.GetDescription().lower()
-                    
-                    if ('female' in voice_name or 'woman' in voice_name or 
-                        'zira' in voice_name or 'microsoft zira' in voice_name):
-                        self.voice_speaker.Voice = voice
-                        print(f"Set voice to likely female voice: {voice.GetDescription()}")
-                        return True
-                
-                # For Microsoft SAPI5 on Windows, try voice #1 which is often female (Zira)
-                if voices.Count > 1:
-                    self.voice_speaker.Voice = voices.Item(1)
-                    print(f"Set voice to second voice (likely female): {voices.Item(1).GetDescription()}")
-                    return True
-                    
-                print("No female voice found")
-                return False
-            except Exception as e:
-                print(f"Error setting female voice with Windows Speech API: {e}")
-                return False
-        return False
 
     def initialize_audio(self) -> None:
         """Initialize the Pygame mixer and load sound files"""
@@ -396,187 +185,253 @@ class PygameAudioService(AudioService):
             print(f"Warning: Pygame mixer initialization failed: {e}")
             print("Falling back to text-based audio feedback")
 
-    def play_sound(self, effect: SoundEffect) -> None:
-        """Play a sound effect using Pygame mixer"""
-        if not self.enable_sounds:
-            return
-
-        volume = self.sound_volumes.get(effect, 1.0)
-
-        # If we have a loaded sound, play it
-        if self.sounds[effect] is not None:
-            sound = self.sounds[effect]
-            if sound is not None:  # Extra check for mypy
-                sound.set_volume(volume)
-                sound.play()
-        else:
-            # Fall back to text output for now
-            print(f"Playing sound: {effect.name} at volume {volume}")
-
-    def play_narration(self, text: str) -> None:
-        """Play narrated text using a text-to-speech engine"""
-        if not self.enable_narration:
-            return
-
-        # Always print to console for accessibility
-        print(f"Narrating: {text} at volume {self.narration_volume}")
+    def increase_speech_rate(self, amount: int = 10) -> None:
+        """Increase the speech rate"""
+        self.speech_rate = min(250, self.speech_rate + amount)
+        print(f"Increasing speech rate to {self.speech_rate}")
         
-        # Try SRAL first
+        # Update the speech rate in the appropriate engine
         if self.sral:
             try:
-                self.sral.speak(text)
-                return
+                self.sral.set_rate(self.speech_rate)
+                self.play_narration(f"Speech rate {self.speech_rate}")
             except Exception as e:
-                print(f"Error with SRAL narration: {e}")
-        
-        # Use text-to-speech engine if available
-        if self.tts_engine is not None:
+                print(f"Error setting SRAL speech rate: {e}")
+        elif self.tts_engine:
             try:
-                # Set the volume
-                self.tts_engine.setProperty("volume", self.narration_volume)
-                
-                # Queue the text to be spoken
-                self.tts_engine.say(text)
-                
-                # Play the queued text
-                self.tts_engine.runAndWait()
+                self.tts_engine.setProperty('rate', self.speech_rate)
+                self.play_narration(f"Speech rate {self.speech_rate}")
             except Exception as e:
-                print(f"Error with pyttsx3 narration: {e}")
-                # Fall back to Windows Speech API if pyttsx3 fails
-                if self.voice_speaker is None:
-                    try:
-                        import win32com.client
-                        self.voice_speaker = win32com.client.Dispatch("SAPI.SpVoice")
-                        self.voice_speaker.Volume = int(self.narration_volume * 100)
-                        rate_normalized = int((self.speech_rate - 150) / 10)
-                        self.voice_speaker.Rate = rate_normalized
-                        print("Falling back to Windows Speech API")
-                    except Exception as e2:
-                        print(f"Could not initialize Windows Speech API: {e2}")
-                
-                if self.voice_speaker is not None:
-                    try:
-                        self.voice_speaker.Speak(text)
-                    except Exception as e3:
-                        print(f"Error with Windows Speech API: {e3}")
-        
-        # Use Windows Speech API if pyttsx3 is not available
-        elif self.voice_speaker is not None:
+                print(f"Error setting pyttsx3 speech rate: {e}")
+        elif self.voice_speaker:
             try:
-                # Set the volume (0-100)
-                self.voice_speaker.Volume = int(self.narration_volume * 100)
-                
-                # Speak the text
-                self.voice_speaker.Speak(text)
+                # Convert our 50-250 scale to -10 to 10 scale
+                rate_normalized = int((self.speech_rate - 150) / 10)
+                self.voice_speaker.Rate = rate_normalized
+                self.play_narration(f"Speech rate {self.speech_rate}")
             except Exception as e:
-                print(f"Error with Windows Speech API narration: {e}")
-    
-    def set_narration_volume(self, volume: float) -> None:
-        """Set the volume for narration (0.0 to 1.0)"""
-        # Call the parent method to update the narration_volume property
-        super().set_narration_volume(volume)
+                print(f"Error setting Windows Speech API rate: {e}")
         
         # Save the configuration
-        from cli.game.config import get_audio_config, save_audio_config
-        audio_config = get_audio_config()
-        audio_config["narration_volume"] = self.narration_volume
-        save_audio_config(audio_config)
+        try:
+            from cli.game.config import get_audio_config, save_audio_config
+            audio_config = get_audio_config()
+            audio_config["speech_rate"] = self.speech_rate
+            save_audio_config(audio_config)
+            print(f"Saved audio config: speech_rate={self.speech_rate}")
+        except ImportError:
+            # Config module not available
+            print("Could not save audio configuration: Config module not available")
+            pass
+
+    def decrease_speech_rate(self, amount: int = 10) -> None:
+        """Decrease the speech rate"""
+        self.speech_rate = max(50, self.speech_rate - amount)
+        print(f"Decreasing speech rate to {self.speech_rate}")
         
-        # Also update the TTS engine if available
-        if self.tts_engine is not None:
+        # Update the speech rate in the appropriate engine
+        if self.sral:
             try:
-                self.tts_engine.setProperty("volume", self.narration_volume)
+                self.sral.set_rate(self.speech_rate)
+                self.play_narration(f"Speech rate {self.speech_rate}")
+            except Exception as e:
+                print(f"Error setting SRAL speech rate: {e}")
+        elif self.tts_engine:
+            try:
+                self.tts_engine.setProperty('rate', self.speech_rate)
+                self.play_narration(f"Speech rate {self.speech_rate}")
+            except Exception as e:
+                print(f"Error setting pyttsx3 speech rate: {e}")
+        elif self.voice_speaker:
+            try:
+                # Convert our 50-250 scale to -10 to 10 scale
+                rate_normalized = int((self.speech_rate - 150) / 10)
+                self.voice_speaker.Rate = rate_normalized
+                self.play_narration(f"Speech rate {self.speech_rate}")
+            except Exception as e:
+                print(f"Error setting Windows Speech API rate: {e}")
+        
+        # Save the configuration
+        try:
+            from cli.game.config import get_audio_config, save_audio_config
+            audio_config = get_audio_config()
+            audio_config["speech_rate"] = self.speech_rate
+            save_audio_config(audio_config)
+            print(f"Saved audio config: speech_rate={self.speech_rate}")
+        except ImportError:
+            # Config module not available
+            print("Could not save audio configuration: Config module not available")
+            pass
+
+    def increase_sound_volume(self, amount: float = 0.1) -> None:
+        """Increase the sound volume"""
+        for effect in SoundEffect:
+            self.sound_volumes[effect] = min(1.0, self.sound_volumes[effect] + amount)
+        
+        # Play a sound to demonstrate the new volume
+        self.play_sound(SoundEffect.MENU_NAV)
+        self.play_narration(f"Sound volume {int(self.sound_volumes[SoundEffect.MENU_NAV] * 100)}%")
+        
+        # Save the configuration
+        try:
+            from cli.game.config import get_audio_config, save_audio_config
+            audio_config = get_audio_config()
+            audio_config["sound_volume"] = self.sound_volumes[SoundEffect.MENU_NAV]
+            save_audio_config(audio_config)
+            print(f"Saved audio config: sound_volume={self.sound_volumes[SoundEffect.MENU_NAV]}")
+        except ImportError:
+            # Config module not available
+            print("Could not save audio configuration: Config module not available")
+            pass
+
+    def decrease_sound_volume(self, amount: float = 0.1) -> None:
+        """Decrease the sound volume"""
+        for effect in SoundEffect:
+            self.sound_volumes[effect] = max(0.0, self.sound_volumes[effect] - amount)
+        
+        # Play a sound to demonstrate the new volume
+        self.play_sound(SoundEffect.MENU_NAV)
+        self.play_narration(f"Sound volume {int(self.sound_volumes[SoundEffect.MENU_NAV] * 100)}%")
+        
+        # Save the configuration
+        try:
+            from cli.game.config import get_audio_config, save_audio_config
+            audio_config = get_audio_config()
+            audio_config["sound_volume"] = self.sound_volumes[SoundEffect.MENU_NAV]
+            save_audio_config(audio_config)
+            print(f"Saved audio config: sound_volume={self.sound_volumes[SoundEffect.MENU_NAV]}")
+        except ImportError:
+            # Config module not available
+            print("Could not save audio configuration: Config module not available")
+            pass
+
+    def increase_narration_volume(self, amount: float = 0.1) -> None:
+        """Increase the narration volume"""
+        self.narration_volume = min(1.0, self.narration_volume + amount)
+        print(f"Increasing narration volume to {self.narration_volume}")
+        
+        # Update the volume in the appropriate engine
+        if self.tts_engine:
+            try:
+                self.tts_engine.setProperty('volume', self.narration_volume)
             except Exception as e:
                 print(f"Error setting pyttsx3 volume: {e}")
-        
-        if self.voice_speaker is not None:
+        elif self.voice_speaker:
             try:
                 self.voice_speaker.Volume = int(self.narration_volume * 100)
             except Exception as e:
                 print(f"Error setting Windows Speech API volume: {e}")
-                
-        print(f"Narration volume set to {self.narration_volume}")
         
-        # Announce the new volume
+        # Play a narration to demonstrate the new volume
         self.play_narration(f"Narration volume {int(self.narration_volume * 100)}%")
-    
-    def increase_narration_volume(self, amount: float = 0.1) -> None:
-        """Increase narration volume"""
-        self.set_narration_volume(self.narration_volume + amount)
-    
-    def decrease_narration_volume(self, amount: float = 0.1) -> None:
-        """Decrease narration volume"""
-        self.set_narration_volume(self.narration_volume - amount)
-    
-    def set_sound_effect_volume(self, volume: float) -> None:
-        """Set volume for all sound effects"""
-        for effect in SoundEffect:
-            self.set_sound_volume(effect, volume)
         
         # Save the configuration
-        from cli.game.config import get_audio_config, save_audio_config
-        audio_config = get_audio_config()
-        audio_config["sound_volume"] = volume
-        save_audio_config(audio_config)
-        
-        print(f"All sound effects set to volume {volume}")
-        
-        # Announce the change
-        self.play_narration(f"Sound effect volume {int(volume * 100)}%")
-        
-        # Play a sound to demonstrate new volume
-        self.play_sound(SoundEffect.MENU_NAV)
+        try:
+            from cli.game.config import get_audio_config, save_audio_config
+            audio_config = get_audio_config()
+            audio_config["narration_volume"] = self.narration_volume
+            save_audio_config(audio_config)
+            print(f"Saved audio config: narration_volume={self.narration_volume}")
+        except ImportError:
+            # Config module not available
+            print("Could not save audio configuration: Config module not available")
+            pass
 
-    def increase_sound_volume(self, amount: float = 0.1) -> None:
-        """Increase sound effect volume"""
-        # Get current volume (use first effect as reference)
-        current = self.sound_volumes.get(SoundEffect.MENU_NAV, 1.0)
-        new_volume = min(1.0, current + amount)
-        self.set_sound_effect_volume(new_volume)
-    
-    def decrease_sound_volume(self, amount: float = 0.1) -> None:
-        """Decrease sound effect volume"""
-        # Get current volume (use first effect as reference)
-        current = self.sound_volumes.get(SoundEffect.MENU_NAV, 1.0)
-        new_volume = max(0.0, current - amount)
-        self.set_sound_effect_volume(new_volume)
-
-    # Override speech control methods to use SRAL if available
-    def pause_speech(self) -> None:
-        """Pause the current speech"""
-        if self.sral:
+    def decrease_narration_volume(self, amount: float = 0.1) -> None:
+        """Decrease the narration volume"""
+        self.narration_volume = max(0.0, self.narration_volume - amount)
+        print(f"Decreasing narration volume to {self.narration_volume}")
+        
+        # Update the volume in the appropriate engine
+        if self.tts_engine:
             try:
-                self.sral.pause_speech()
-                return
+                self.tts_engine.setProperty('volume', self.narration_volume)
             except Exception as e:
-                print(f"Error pausing SRAL speech: {e}")
-        
-        # Fall back to parent implementation
-        super().pause_speech()
-
-    def resume_speech(self) -> None:
-        """Resume paused speech"""
-        if self.sral:
+                print(f"Error setting pyttsx3 volume: {e}")
+        elif self.voice_speaker:
             try:
-                self.sral.resume_speech()
-                return
+                self.voice_speaker.Volume = int(self.narration_volume * 100)
             except Exception as e:
-                print(f"Error resuming SRAL speech: {e}")
+                print(f"Error setting Windows Speech API volume: {e}")
         
-        # Fall back to parent implementation
-        super().resume_speech()
+        # Play a narration to demonstrate the new volume
+        self.play_narration(f"Narration volume {int(self.narration_volume * 100)}%")
+        
+        # Save the configuration
+        try:
+            from cli.game.config import get_audio_config, save_audio_config
+            audio_config = get_audio_config()
+            audio_config["narration_volume"] = self.narration_volume
+            save_audio_config(audio_config)
+            print(f"Saved audio config: narration_volume={self.narration_volume}")
+        except ImportError:
+            # Config module not available
+            print("Could not save audio configuration: Config module not available")
+            pass
 
-    def stop_speech(self) -> None:
-        """Stop the current speech"""
-        if self.sral:
-            try:
-                self.sral.stop_speech()
-                return
-            except Exception as e:
-                print(f"Error stopping SRAL speech: {e}")
+    def toggle_running_screen_reader(self, use_running_sr: bool) -> None:
+        """Toggle between using SRAL directly or using the running screen reader"""
+        if self.using_running_screen_reader == use_running_sr:
+            # No change needed
+            return
+            
+        self.using_running_screen_reader = use_running_sr
+        print(f"Setting use_running_screen_reader to {use_running_sr}")
         
-        # Fall back to parent implementation
-        super().stop_speech()
+        # Save the configuration
+        try:
+            from cli.game.config import get_audio_config, save_audio_config
+            audio_config = get_audio_config()
+            audio_config["use_running_screen_reader"] = use_running_sr
+            print(f"Updating audio config with use_running_screen_reader={use_running_sr}")
+            save_audio_config(audio_config)
+        except Exception as e:
+            print(f"Error saving configuration: {e}")
+        
+        # Clean up existing SRAL instance if any
+        if self.sral:
+            # SRAL will clean up in its own __del__ method
+            self.sral = None
+            
+        # Initialize a new SRAL instance with the appropriate settings
+        try:
+            import sral
+            from cli.sral_wrapper import SRALEngines
+            
+            if self.using_running_screen_reader:
+                # Initialize SRAL with engines_exclude=0 to use the running screen reader
+                # This will make SRAL use the currently active screen reader
+                engines_exclude = 0
+                print(f"Initializing SRAL with engines_exclude={engines_exclude} to use running screen reader")
+                self.sral = sral.Sral(engines_exclude=engines_exclude)
+                print("SRAL initialized to use running screen reader")
+                self.play_narration("Using running screen reader")
+            else:
+                # Initialize SRAL to use SAPI specifically by excluding all other engines
+                engines_to_exclude = (
+                    SRALEngines.NVDA | 
+                    SRALEngines.JAWS | 
+                    SRALEngines.SPEECH_DISPATCHER | 
+                    SRALEngines.UIA | 
+                    SRALEngines.AV_SPEECH | 
+                    SRALEngines.NARRATOR
+                )
+                print(f"Initializing SRAL with engines_exclude={engines_to_exclude} to use SAPI only")
+                self.sral = sral.Sral(engines_exclude=engines_to_exclude)
+                
+                # Verify SAPI is being used
+                current_engine = self.sral.get_current_engine()
+                print(f"Current engine after initialization: {current_engine}")
+                
+                if current_engine == SRALEngines.SAPI:
+                    print("Successfully initialized SAPI direct speech")
+                    self.play_narration("Using SAPI direct speech")
+                else:
+                    print(f"Warning: Expected SAPI engine but got engine {current_engine}")
+                    self.play_narration("Speech engine changed, but not to SAPI as expected")
+        except Exception as e:
+            print(f"Error reinitializing SRAL: {e}")
+            self.play_narration("Failed to change screen reader mode")
 
 
 class PygameInterface:
@@ -597,10 +452,6 @@ class PygameInterface:
         # Initialize audio service
         self.audio = PygameAudioService()
         
-        # Try to set female voice
-        if isinstance(self.audio, PygameAudioService):
-            self.audio.set_female_voice()
-
         # Initialize game loop with the configured audio service
         self.game = GameLoop(audio_service=self.audio)
 

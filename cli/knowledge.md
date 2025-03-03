@@ -49,9 +49,12 @@
 - To switch to SAPI direct speech, use `engines_exclude` with all engines except SAPI
 - The "Toggle Speech Mode" option switches between running screen reader and SAPI direct speech
 - Menu options display their current state (e.g., "Currently using running screen reader")
+- Speech mode settings persist across program sessions via the configuration system
 
 ## Configuration System
 - User preferences are stored in `~/.space_colony_defense/config.json`
 - Configuration includes audio settings (speech mode, volumes, rates) and game settings (difficulty)
 - Settings are automatically saved when changed and loaded on game startup
 - This ensures user preferences persist across game sessions
+- When toggling speech modes, the configuration is updated immediately and persists across restarts
+- SAPI initializes correctly at startup based on the saved speech mode setting

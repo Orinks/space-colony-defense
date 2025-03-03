@@ -150,9 +150,10 @@ class Building:
         resources.food -= cost.food
 
         # Upgrade the building
+        old_level = self.level
         self.level = next_level
         self.audio.play_sound(SoundEffect.CONSTRUCTION_COMPLETE)
-        self.audio.play_narration(f"Upgraded {self.type.display_name()} to {self.level.name.lower()} level")
+        self.audio.play_narration(f"Upgraded {self.type.display_name()} from {old_level.name.lower()} to {self.level.name.lower()}")
         return True
 
     def produce_resources(self, resources: Resources) -> None:
