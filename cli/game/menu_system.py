@@ -216,6 +216,10 @@ class MenuSystem:
             building_type = building_type_map[option]
             building = Building(type=building_type, audio=self.audio)
             
+            # Announce building details before construction
+            from cli.game.management import announce_building_details
+            announce_building_details(building, self.game_state, self.audio)
+            
             if self.game_state.add_building(building):
                 self.audio.play_sound(SoundEffect.ACTION_SUCCESS)
                 self.audio.play_narration(f"{building_type.display_name()} constructed successfully")
@@ -250,6 +254,12 @@ class MenuSystem:
         """Show the build menu"""
         self.current_menu = "build"
         self.current_index = 0
+        
+        # Show detailed building options
+        if self.game_state:
+            from cli.game.management import show_building_options
+            show_building_options(self.game_state, self.audio)
+        
         self.audio.play_narration("Build menu. Select a building to construct.")
         self._announce_current_option()
 
@@ -259,9 +269,19 @@ class MenuSystem:
             self.audio.play_sound(SoundEffect.ACTION_FAIL)
             self.audio.play_narration("No buildings to upgrade")
             return
+        
+        # Show list of buildings that can be upgraded
+        self.audio.play_narration("Select a building to upgrade:")
+        for i, building in enumerate(self.game_state.buildings):
+            self.audio.play_narration(f"{i+1}: {building.type.display_name()} (Level: {building.level.name})")
+            
+            # Show upgrade details for the first building
+            if i == 0:
+                from cli.game.management import announce_upgrade_details
+                announce_upgrade_details(building, self.game_state, self.audio)
             
         # For now, just upgrade the first building as an example
-        # A more complete implementation would list all buildings and let the player choose
+        # A more complete implementation would let the player choose
         if self.game_state.upgrade_building(0):
             self.audio.play_sound(SoundEffect.ACTION_SUCCESS)
             # Upgrade success message already played by the building itself
@@ -327,9 +347,46 @@ class MenuSystem:
                     f"{option.name.lower().replace('_', ' ')}"
                 )
         elif self.current_menu == "build":
-            self.audio.play_narration(
-                f"{self.build_menu_options[self.current_index].name.lower().replace('_', ' ')}"
-            )
+            option = self.build_menu_options[self.current_index]
+            option_name = option.name.lower().replace('_', ' ')
+            
+            # Add cost information if available
+            if option != BuildMenuOption.BACK and self.game_state:
+                building_type_map = {
+                    BuildMenuOption.SOLAR_PANEL: BuildingType.SOLAR_PANEL,
+                    BuildMenuOption.HYDROPONIC_FARM: BuildingType.HYDROPONIC_FARM,
+                    BuildMenuOption.SCRAP_FORGE: BuildingType.SCRAP_FORGE,
+                    BuildMenuOption.SHIELD_GENERATOR: BuildingType.SHIELD_GENERATOR,
+                    BuildMenuOption.RESEARCH_LAB: BuildingType.RESEARCH_LAB,
+                    BuildMenuOption.REPAIR_BAY: BuildingType.REPAIR_BAY,
+                    BuildMenuOption.MISSILE_SILO: BuildingType.MISSILE_SILO,
+                    BuildMenuOption.COMMAND_CENTER: BuildingType.COMMAND_CENTER,
+                }
+                
+                if option in building_type_map:
+                    building_type = building_type_map[option]
+                    building = Building(type=building_type, audio=self.audio)
+                    cost = building._costs[building_type]
+                    
+                    # Format cost string
+                    cost_str = []
+                    if cost.metal > 0:
+                        cost_str.append(f"{cost.metal} metal")
+                    if cost.energy > 0:
+                        cost_str.append(f"{cost.energy} energy")
+                    if cost.food > 0:
+                        cost_str.append(f"{cost.food} food")
+                    
+                    cost_text = ", ".join(cost_str)
+                    
+                    # Check if player has enough resources
+                    has_resources = building.check_resources(self.game_state.resources)
+                    resource_status = "Available" if has_resources else "Not enough resources"
+                    
+                    self.audio.play_narration(f"{option_name} - Cost: {cost_text} - {resource_status}")
+                    return
+            
+            self.audio.play_narration(option_name)
         else:  # game menu
             self.audio.play_narration(
                 f"{self.options[self.current_index].name.lower()}"
@@ -354,6 +411,12 @@ class MenuSystem:
             f"Buildings: {len(self.game_state.buildings)}."
         )
         self.audio.play_narration(status)
+        
+        # Announce buildings if any exist
+        if self.game_state.buildings:
+            self.audio.play_narration("Your buildings:")
+            for i, building in enumerate(self.game_state.buildings):
+                self.audio.play_narration(f"{i+1}: {building.type.display_name()} (Level: {building.level.name})")
 
     def _announce_build_options(self) -> None:
         self.audio.play_narration(
@@ -361,11 +424,20 @@ class MenuSystem:
             "Available buildings: Solar Panel, Hydroponic Farm, Scrap Forge, "
             "Shield Generator, Research Lab, Repair Bay, Missile Silo, Command Center."
         )
+        
+        # Show detailed building options if game state is available
+        if self.game_state:
+            from cli.game.management import show_building_options
+            show_building_options(self.game_state, self.audio)
 
     def _try_repair_colony(self) -> None:
         if not self.game_state:
             return
             
+        # Announce repair cost and current resources
+        repair_cost = 20  # This should match the cost in Colony.repair
+        self.audio.play_narration(f"Repair colony - Cost: {repair_cost} metal. You have {self.game_state.resources.metal} metal.")
+        
         if self.game_state.colony.repair(self.game_state.resources, self.audio):
             self.audio.play_sound(SoundEffect.ACTION_SUCCESS)
         else:
