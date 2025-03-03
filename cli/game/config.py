@@ -27,14 +27,18 @@ def ensure_config_dir() -> None:
     """Ensure the configuration directory exists."""
     if not os.path.exists(CONFIG_DIR):
         os.makedirs(CONFIG_DIR)
+        print(f"Created configuration directory: {CONFIG_DIR}")
 
 
 def load_config() -> Dict[str, Any]:
     """Load configuration from file or create default if it doesn't exist."""
     ensure_config_dir()
     
+    print(f"Loading configuration from: {CONFIG_FILE}")
+    
     if not os.path.exists(CONFIG_FILE):
         # Create default configuration file
+        print("Configuration file does not exist, creating default")
         save_config(DEFAULT_CONFIG)
         return DEFAULT_CONFIG.copy()
     
@@ -42,12 +46,15 @@ def load_config() -> Dict[str, Any]:
         with open(CONFIG_FILE, "r") as f:
             config = json.load(f)
         
+        print(f"Loaded configuration: {config}")
+        
         # Ensure all default keys exist (in case config file is from older version)
         merged_config = DEFAULT_CONFIG.copy()
         for section, values in config.items():
             if section in merged_config:
                 merged_config[section].update(values)
         
+        print(f"Merged configuration: {merged_config}")
         return merged_config
     except Exception as e:
         print(f"Error loading configuration: {e}")
@@ -58,9 +65,13 @@ def save_config(config: Dict[str, Any]) -> None:
     """Save configuration to file."""
     ensure_config_dir()
     
+    print(f"Saving configuration to: {CONFIG_FILE}")
+    print(f"Configuration to save: {config}")
+    
     try:
         with open(CONFIG_FILE, "w") as f:
             json.dump(config, f, indent=2)
+        print("Configuration saved successfully")
     except Exception as e:
         print(f"Error saving configuration: {e}")
 

@@ -11,10 +11,12 @@ class MenuOption(Enum):
     REPAIR = auto()
     STATUS = auto()
     NEXT_WAVE = auto()
+    SAVE_GAME = auto()
 
 
 class MainMenuOption(Enum):
     NEW_GAME = auto()
+    LOAD_GAME = auto()
     OPTIONS = auto()
     EXIT = auto()
 
@@ -50,20 +52,36 @@ class MenuSystem:
         self.main_menu_options = list(MainMenuOption)
         self.options_menu_options = list(OptionsMenuOption)
         self.build_menu_options = list(BuildMenuOption)
-        self.current_menu = "game"  # Can be "main", "game", "options", or "build"
+        self.current_menu = "game"  # Can be "main", "game", "options", "build", or "load_game"
+        self.save_files = []  # List of save files when in load_game menu
 
         # Load difficulty settings from config
         try:
             from cli.game.config import get_game_config
             game_config = get_game_config()
             self.difficulty_level = game_config.get("difficulty", 1)  # 1=Easy, 2=Medium, 3=Hard
+            print(f"Loaded difficulty setting from config: {self.difficulty_level}")
         except ImportError:
             # Config module not available, use default
             self.difficulty_level = 1
+            print("Config module not available, using default difficulty level")
         
-        # Screen reader settings - default to using running screen reader
+        # Screen reader settings - get from audio service if possible
         from cli.game.pygame_interface import PygameAudioService
-        self.use_running_screen_reader = isinstance(self.audio, PygameAudioService) and self.audio.using_running_screen_reader
+        if isinstance(self.audio, PygameAudioService):
+            self.use_running_screen_reader = self.audio.using_running_screen_reader
+            print(f"Using screen reader mode from PygameAudioService: {self.use_running_screen_reader}")
+        else:
+            # Try to load from config directly
+            try:
+                from cli.game.config import get_audio_config
+                audio_config = get_audio_config()
+                self.use_running_screen_reader = audio_config.get("use_running_screen_reader", True)
+                print(f"Loaded screen reader mode from config: {self.use_running_screen_reader}")
+            except ImportError:
+                # Config module not available, use default
+                self.use_running_screen_reader = True
+                print("Config module not available, defaulting screen reader mode to True")
 
     def navigate_up(self) -> None:
         if self.current_menu == "main":
@@ -76,6 +94,8 @@ class MenuSystem:
             self.current_index = (self.current_index - 1) % len(
                 self.build_menu_options
             )
+        elif self.current_menu == "load_game":
+            self.current_index = (self.current_index - 1) % (len(self.save_files) + 1)  # +1 for Back option
         else:  # game menu
             self.current_index = (self.current_index - 1) % len(self.options)
         self._announce_current_option()
@@ -91,6 +111,8 @@ class MenuSystem:
             self.current_index = (self.current_index + 1) % len(
                 self.build_menu_options
             )
+        elif self.current_menu == "load_game":
+            self.current_index = (self.current_index + 1) % (len(self.save_files) + 1)  # +1 for Back option
         else:  # game menu
             self.current_index = (self.current_index + 1) % len(self.options)
         self._announce_current_option()
@@ -103,6 +125,8 @@ class MenuSystem:
             return self._handle_options_menu_selection()
         elif self.current_menu == "build":
             return self._handle_build_menu_selection()
+        elif self.current_menu == "load_game":
+            return self._handle_load_game_selection()
         else:  # game menu
             self._handle_game_menu_selection()
             return None
@@ -116,6 +140,10 @@ class MenuSystem:
             self.current_menu = "game"
             self.current_index = 0
             return "new_game"
+        elif option == MainMenuOption.LOAD_GAME:
+            self.audio.play_sound(SoundEffect.MENU_NAV)
+            self.show_load_game_menu()
+            return None
         elif option == MainMenuOption.OPTIONS:
             self.audio.play_sound(SoundEffect.MENU_NAV)
             self.audio.play_narration("Options menu")
@@ -156,6 +184,7 @@ class MenuSystem:
                 new_state = not current_state
                 # Update menu state to match
                 self.use_running_screen_reader = new_state
+                print(f"Toggling speech mode to {new_state} (running SR = {new_state})")
                 # Apply the change to the audio service
                 self.audio.toggle_running_screen_reader(new_state)
                 # The narration will be played by the toggle_running_screen_reader method
@@ -176,8 +205,10 @@ class MenuSystem:
                 game_config = get_game_config()
                 game_config["difficulty"] = self.difficulty_level
                 save_game_config(game_config)
+                print(f"Saved game config: difficulty={self.difficulty_level}")
             except ImportError:
                 # Config module not available
+                print("Could not save game configuration: Config module not available")
                 pass
                 
             return None
@@ -233,6 +264,23 @@ class MenuSystem:
             
         return None
 
+    def _handle_load_game_selection(self) -> Optional[str]:
+        """Handle selection in the load game menu"""
+        # Check if "Back" option is selected (always the last option)
+        if self.current_index == len(self.save_files):
+            self.audio.play_sound(SoundEffect.MENU_NAV)
+            self.audio.play_narration("Returning to main menu")
+            self.current_menu = "main"
+            self.current_index = 0
+            return None
+            
+        # Otherwise, load the selected save file
+        if 0 <= self.current_index < len(self.save_files):
+            save_file = self.save_files[self.current_index]
+            return f"load_slot_{self.current_index}"
+            
+        return None
+
     def _handle_game_menu_selection(self) -> None:
         """Handle selection in the game menu"""
         if not self.game_state:
@@ -249,6 +297,8 @@ class MenuSystem:
             self._try_repair_colony()
         elif option == MenuOption.NEXT_WAVE:
             self._announce_next_wave()
+        elif option == MenuOption.SAVE_GAME:
+            self._save_game()
 
     def _show_build_menu(self) -> None:
         """Show the build menu"""
@@ -261,6 +311,40 @@ class MenuSystem:
             show_building_options(self.game_state, self.audio)
         
         self.audio.play_narration("Build menu. Select a building to construct.")
+        self._announce_current_option()
+
+    def show_load_game_menu(self) -> None:
+        """Show the load game menu"""
+        from cli.game.save_system import list_save_files, get_save_info
+        
+        # Get list of save files
+        self.save_files = list_save_files()
+        
+        # Switch to load game menu
+        self.current_menu = "load_game"
+        self.current_index = 0
+        
+        # Announce menu
+        self.audio.play_narration("Load game menu. Select a save file to load.")
+        
+        # Announce save files
+        if not self.save_files:
+            self.audio.play_narration("No save files found.")
+        else:
+            for i, save_file in enumerate(self.save_files):
+                save_info = get_save_info(save_file)
+                if save_info:
+                    self.audio.play_narration(
+                        f"Save {i+1}: Wave {save_info['wave']}, "
+                        f"Colony HP: {save_info['colony_hp']}/{save_info['colony_max_hp']}, "
+                        f"Buildings: {save_info['building_count']}, "
+                        f"Saved on: {save_info['save_date']}"
+                    )
+        
+        # Add "Back" option
+        self.audio.play_narration("Back to main menu")
+        
+        # Announce first option
         self._announce_current_option()
 
     def _show_upgrade_options(self) -> None:
@@ -289,6 +373,22 @@ class MenuSystem:
             self.audio.play_sound(SoundEffect.ACTION_FAIL)
             # Upgrade failure message already played by the building itself
 
+    def _save_game(self) -> None:
+        """Save current game"""
+        from cli.game.save_system import save_game
+        
+        if not self.game_state:
+            self.audio.play_sound(SoundEffect.ACTION_FAIL)
+            self.audio.play_narration("No game to save")
+            return
+            
+        if save_game(self.game_state):
+            self.audio.play_sound(SoundEffect.ACTION_SUCCESS)
+            self.audio.play_narration("Game saved successfully")
+        else:
+            self.audio.play_sound(SoundEffect.ACTION_FAIL)
+            self.audio.play_narration("Failed to save game")
+
     def query_status(self) -> None:
         self._announce_status()
 
@@ -316,9 +416,9 @@ class MenuSystem:
             
             # Add current state information for toggle options
             if option == OptionsMenuOption.SOUND_TOGGLE:
-                state = "enabled" if self.audio.enable_sounds else "disabled"
+                status = "enabled" if self.audio.enable_sounds else "disabled"
                 self.audio.play_narration(
-                    f"{option.name.lower().replace('_', ' ')}. Currently {state}"
+                    f"{option.name.lower().replace('_', ' ')}. Currently {status}"
                 )
             elif option == OptionsMenuOption.NARRATION_TOGGLE:
                 state = "enabled" if self.audio.enable_narration else "disabled"
@@ -329,10 +429,16 @@ class MenuSystem:
                 # Check if we're in pygame mode
                 from cli.game.pygame_interface import PygameAudioService
                 if isinstance(self.audio, PygameAudioService):
-                    state = "using running screen reader" if self.audio.using_running_screen_reader else "using SAPI direct speech"
-                    self.audio.play_narration(
-                        f"{option.name.lower().replace('_', ' ')}. Currently {state}"
-                    )
+                    # Get current state before toggling
+                    current_state = self.audio.using_running_screen_reader
+                    # Toggle to opposite state
+                    new_state = not current_state
+                    # Update menu state to match
+                    self.use_running_screen_reader = new_state
+                    print(f"Toggling speech mode to {new_state} (running SR = {new_state})")
+                    # Apply the change to the audio service
+                    self.audio.toggle_running_screen_reader(new_state)
+                    # The narration will be played by the toggle_running_screen_reader method
                 else:
                     self.audio.play_narration(
                         f"{option.name.lower().replace('_', ' ')}"
@@ -387,6 +493,28 @@ class MenuSystem:
                     return
             
             self.audio.play_narration(option_name)
+        elif self.current_menu == "load_game":
+            # If selected "Back" option
+            if self.current_index == len(self.save_files):
+                self.audio.play_narration("Back to main menu")
+                return
+                
+            # Otherwise, announce save file details
+            if 0 <= self.current_index < len(self.save_files):
+                from cli.game.save_system import get_save_info
+                
+                save_file = self.save_files[self.current_index]
+                save_info = get_save_info(save_file)
+                
+                if save_info:
+                    self.audio.play_narration(
+                        f"Save {self.current_index+1}: Wave {save_info['wave']}, "
+                        f"Colony HP: {save_info['colony_hp']}/{save_info['colony_max_hp']}, "
+                        f"Buildings: {save_info['building_count']}, "
+                        f"Saved on: {save_info['save_date']}"
+                    )
+                else:
+                    self.audio.play_narration(f"Save {self.current_index+1}: Invalid save file")
         else:  # game menu
             self.audio.play_narration(
                 f"{self.options[self.current_index].name.lower()}"

@@ -27,8 +27,12 @@ class AudioService:
             audio_config = get_audio_config()
             enable_sounds = audio_config.get("enable_sounds", enable_sounds)
             enable_narration = audio_config.get("enable_narration", enable_narration)
+            use_running_screen_reader = audio_config.get("use_running_screen_reader", True)
+            print(f"Loaded audio settings from config: enable_sounds={enable_sounds}, enable_narration={enable_narration}, use_running_screen_reader={use_running_screen_reader}")
         except ImportError:
             # Config module not available, use defaults
+            print("Config module not available, using default audio settings")
+            use_running_screen_reader = True
             pass
             
         self.enable_sounds = enable_sounds
@@ -42,12 +46,35 @@ class AudioService:
         # Try to initialize SRAL, but don't crash if it fails
         try:
             # Try to use the direct SRAL module first
-            # By default, initialize with engines_exclude=0 to use any available engine
-            # This will make SRAL use the currently active screen reader if available,
-            # or fall back to other engines like SAPI
+            # Check if we should use running screen reader or SAPI
             import sral
-            self.sral = sral.Sral(engines_exclude=0)
-            print("SRAL initialized to use any available speech engine")
+            from cli.sral_wrapper import SRALEngines
+            
+            if use_running_screen_reader:
+                # Initialize with engines_exclude=0 to use any available engine
+                # This will make SRAL use the currently active screen reader if available
+                engines_exclude = 0
+                print("Initializing SRAL to use running screen reader")
+            else:
+                # Initialize SRAL to use SAPI specifically by excluding all other engines
+                engines_exclude = (
+                    SRALEngines.NVDA | 
+                    SRALEngines.JAWS | 
+                    SRALEngines.SPEECH_DISPATCHER | 
+                    SRALEngines.UIA | 
+                    SRALEngines.AV_SPEECH | 
+                    SRALEngines.NARRATOR
+                )
+                print(f"Initializing SRAL to use SAPI only with engines_exclude={engines_exclude}")
+            
+            self.sral = sral.Sral(engines_exclude=engines_exclude)
+            
+            # Verify which engine is being used
+            current_engine = self.sral.get_current_engine()
+            print(f"SRAL initialized with engine: {current_engine}")
+            
+            if not use_running_screen_reader and current_engine != SRALEngines.SAPI:
+                print(f"Warning: Expected SAPI engine but got engine {current_engine}")
         except Exception as e:
             print(f"Could not initialize SRAL using direct module: {e}")
             print("Falling back to console output for narration")
@@ -96,8 +123,10 @@ class AudioService:
             audio_config = get_audio_config()
             audio_config["enable_sounds"] = self.enable_sounds
             save_audio_config(audio_config)
+            print(f"Saved audio config: enable_sounds={self.enable_sounds}")
         except ImportError:
             # Config module not available
+            print("Could not save audio configuration: Config module not available")
             pass
 
     def toggle_narration(self, enable: Optional[bool] = None) -> None:
@@ -119,8 +148,10 @@ class AudioService:
             audio_config = get_audio_config()
             audio_config["enable_narration"] = self.enable_narration
             save_audio_config(audio_config)
+            print(f"Saved audio config: enable_narration={self.enable_narration}")
         except ImportError:
             # Config module not available
+            print("Could not save audio configuration: Config module not available")
             pass
 
     def pause_speech(self) -> None:
