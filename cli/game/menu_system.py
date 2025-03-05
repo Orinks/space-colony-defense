@@ -1,5 +1,6 @@
 from enum import Enum, auto
 from typing import List, Optional, Dict, Callable, Any
+import time
 from cli.game.game_state import GameState
 from cli.game.audio_service import AudioService, SoundEffect
 from cli.game.buildings import BuildingType, Building
@@ -400,9 +401,16 @@ class MenuSystem:
 
     def _announce_main_menu(self) -> None:
         """Announce the main menu options"""
+        # Play the welcome message first and ensure it completes before continuing
         self.audio.play_narration(
-            "Main Menu. Use up and down arrows to navigate, Enter to select."
+            "Welcome to Space Colony Defense! Main Menu. Use up and down arrows to navigate, Enter to select."
         )
+        
+        # Add a small delay to ensure the welcome message is fully spoken before announcing the first option
+        # This helps prevent speech interruption in both text and Pygame modes
+        time.sleep(0.5)
+        
+        # Now announce the current option
         self._announce_current_option()
 
     def _announce_current_option(self) -> None:

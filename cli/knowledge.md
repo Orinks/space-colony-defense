@@ -2,20 +2,18 @@
 
 ## Project Structure
 - The CLI module is the main entry point for the Space Colony Defense game
-- It contains the game logic and interfaces for both text-based and Pygame modes
+- It contains the game logic and Pygame interface for the game
 - All game components are designed with accessibility as a core feature
 
 ## Module Organization
-- `__main__.py`: Entry point that handles command-line arguments and starts the game
+- `__main__.py`: Entry point that starts the game
 - `sral_wrapper.py`: Wrapper for the SRAL accessibility library
 - `game/`: Submodule containing all game logic components
 - `game/config.py`: Configuration management for persisting user preferences
 
 ## Running the Game
-- Default mode: Pygame mode (runs automatically when you execute `python -m cli`)
-- Text mode: `python -m cli --text`
-- Voice selection: `python -m cli --voice <index>`
-- Speech rate: `python -m cli --rate <0-100>`
+- The game runs in Pygame mode: `python -m cli`
+- All settings including voice selection and speech rate can be adjusted through the in-game options menu
 
 ## Controls
 - Up/Down arrows: Navigate menus
@@ -43,8 +41,8 @@
 - SRAL.dll is required for the wrapper to function properly
 - The direct `sral` module is preferred over the wrapper when available
 - Always include error handling for SRAL operations as they may fail
-- SRAL is used in both text mode and Pygame mode, with fallbacks to other TTS engines
-- In Pygame mode, users can toggle using the running screen reader via the options menu
+- SRAL is used for accessibility with fallbacks to other TTS engines
+- In the options menu, users can toggle using the running screen reader
 - By default, SRAL uses the running screen reader (engines_exclude=0)
 - To switch to SAPI direct speech, use `engines_exclude` with all engines except SAPI
 - The "Toggle Speech Mode" option switches between running screen reader and SAPI direct speech
@@ -58,3 +56,9 @@
 - This ensures user preferences persist across game sessions
 - When toggling speech modes, the configuration is updated immediately and persists across restarts
 - SAPI initializes correctly at startup based on the saved speech mode setting
+
+## Speech Timing and Interruption
+- When announcing multiple pieces of information sequentially, use `interrupt=False` in SRAL calls
+- Add small delays (0.5s) between important announcements to prevent speech overlap
+- Welcome messages and menu introductions should complete before menu options are announced
+- This is especially important for screen reader users who need to hear complete instructions

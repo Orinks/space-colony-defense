@@ -92,8 +92,8 @@ class AudioService:
         if self.enable_narration:
             if self.sral:
                 try:
-                    # Use SRAL for text-to-speech
-                    self.sral.speak(text)
+                    # Use SRAL for text-to-speech with interrupt=False to prevent cutting off previous speech
+                    self.sral.speak(text, interrupt=False)
                 except Exception as e:
                     print(f"Error using SRAL for speech: {e}")
                     print(f"Narrating: {text} at volume {self.narration_volume}")

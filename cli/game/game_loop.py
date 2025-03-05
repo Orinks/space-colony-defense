@@ -357,7 +357,7 @@ class GameLoop:
             self.game_running = False
             self.menu.show_main_menu()
 
-        return True
+        return True  # Continue running
 
     def game_over(self) -> None:
         """Handle game over state"""

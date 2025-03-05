@@ -23,3 +23,6 @@ SRAL.dll
 
 # Poetry files
 poetry.lock
+
+# Sound files documentation
+sound_files_list.md
