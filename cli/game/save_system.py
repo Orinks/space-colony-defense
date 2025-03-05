@@ -234,3 +234,67 @@ def get_save_info(save_path: str) -> Optional[Dict[str, Any]]:
     except Exception as e:
         print(f"Error reading save file {save_path}: {e}")
         return None
+
+# Tech Tree Save/Load Functions
+def save_tech_tree(tech_tree, save_path: Optional[str] = None) -> bool:
+    """Save tech tree to file"""
+    try:
+        # Generate save path if not provided
+        if save_path is None:
+            save_dir = get_save_directory()
+            save_path = os.path.join(save_dir, "tech_tree.json")
+        
+        # Convert tech tree to serializable dictionary
+        save_data = {
+            "owned_techs": tech_tree.owned_techs,
+            "available_points": tech_tree.available_points
+        }
+        
+        # Write to file
+        with open(save_path, "w") as f:
+            json.dump(save_data, f, indent=2)
+            
+        print(f"Tech tree saved to {save_path}")
+        return True
+        
+    except Exception as e:
+        print(f"Error saving tech tree: {e}")
+        return False
+
+def load_tech_tree(save_path: Optional[str] = None):
+    """Load tech tree from file"""
+    try:
+        # Import here to avoid circular imports
+        from cli.game.tech_tree import PlayerTechTree
+        
+        # Generate save path if not provided
+        if save_path is None:
+            save_dir = get_save_directory()
+            save_path = os.path.join(save_dir, "tech_tree.json")
+        
+        # Check if file exists
+        if not os.path.exists(save_path):
+            print(f"Tech tree file not found: {save_path}")
+            return PlayerTechTree()  # Return a new tech tree
+        
+        # Read save data
+        with open(save_path, "r") as f:
+            save_data = json.load(f)
+        
+        # Create tech tree
+        tech_tree = PlayerTechTree()
+        tech_tree.owned_techs = save_data.get("owned_techs", {})
+        tech_tree.available_points = save_data.get("available_points", 0)
+        
+        # Update tech levels based on owned_techs
+        for tech_id, level in tech_tree.owned_techs.items():
+            if tech_id in tech_tree.techs:
+                tech_tree.techs[tech_id].level = level
+        
+        print(f"Tech tree loaded from {save_path}")
+        return tech_tree
+        
+    except Exception as e:
+        print(f"Error loading tech tree: {e}")
+        from cli.game.tech_tree import PlayerTechTree
+        return PlayerTechTree()  # Return a new tech tree on error

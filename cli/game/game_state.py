@@ -48,6 +48,10 @@ class GameState:
         self.shield_strength = 0
         self.missiles = 0
         self.wave_skip_available = 0
+        
+        # For retreat calculations
+        self.total_enemies_in_wave = 0
+        self.enemies_defeated_in_current_wave = 0
 
     def collect_resource(self, enemy: Enemy) -> None:
         drop = enemy.get_resource_drop()
@@ -127,9 +131,29 @@ class GameState:
         return self.colony.hp <= 0
 
     def retreat(self) -> None:
-        # Award tech points based on current wave; using integer division for simplicity.
-        self.tech_points += self.wave // 2
-        
+        """Award tech points when player chooses to retreat, but only if they've made progress"""
+        # Only award points if player has defeated at least 50% of the wave's enemies
+        if self.enemies_defeated_in_current_wave >= self.total_enemies_in_wave // 2:
+            points_earned = self.wave // 2
+            self.tech_points += points_earned
+            self.audio.play_narration(f"Strategic retreat successful. Gained {points_earned} tech points.")
+        else:
+            self.audio.play_narration("Retreat completed. No tech points earned - not enough enemies defeated.")
+    
+    def complete_wave(self) -> None:
+        """Award tech points for completing a wave"""
+        # More points for higher waves
+        points_earned = max(1, self.wave // 3)
+        self.tech_points += points_earned
+        self.audio.play_narration(f"Wave {self.wave} complete. Gained {points_earned} tech points.")
+    
+    def defeat_boss(self) -> None:
+        """Award tech points for defeating boss waves (every 5 waves)"""
+        if self.wave % 5 == 0:
+            boss_points = self.wave // 2
+            self.tech_points += boss_points
+            self.audio.play_narration(f"Boss defeated! Gained {boss_points} tech points.")
+    
     def skip_waves(self) -> bool:
         """Skip waves if command center allows it"""
         if self.wave_skip_available > 0:

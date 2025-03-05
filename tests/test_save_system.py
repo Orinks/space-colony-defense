@@ -7,6 +7,7 @@ from typing import Dict, Optional
 from cli.game.game_state import GameState, Resources, Colony
 from cli.game.buildings import Building, BuildingType
 from cli.game.audio_service import AudioService
+from cli.game.tech_tree import PlayerTechTree
 
 # Test constants
 TEST_SAVE_DIR = tempfile.mkdtemp()
@@ -206,3 +207,36 @@ def test_auto_save_directory_creation():
     
     # Verify directory was created
     assert os.path.exists(save_dir)
+
+
+def test_save_load_tech_tree():
+    """Test saving and loading tech tree"""
+    from cli.game.tech_tree import PlayerTechTree
+    from cli.game.save_system import save_tech_tree, load_tech_tree
+    
+    # Create a tech tree with some purchased techs
+    tech_tree = PlayerTechTree()
+    tech_tree.available_points = 50
+    
+    # Purchase some techs
+    tech_tree.purchase_tech("reinforced_colony", 50)
+    tech_tree.purchase_tech("resource_storage", 50)
+    
+    # Save tech tree to a temporary file
+    save_path = os.path.join(TEST_SAVE_DIR, "test_tech_tree.json")
+    success = save_tech_tree(tech_tree, save_path)
+    
+    # Assert save was successful
+    assert success is True
+    assert os.path.exists(save_path)
+    
+    # Load tech tree from the temporary file
+    loaded_tech_tree = load_tech_tree(save_path)
+    
+    # Assert loaded tech tree matches the original
+    assert loaded_tech_tree is not None
+    assert loaded_tech_tree.available_points == 50
+    assert "reinforced_colony" in loaded_tech_tree.owned_techs
+    assert "resource_storage" in loaded_tech_tree.owned_techs
+    assert loaded_tech_tree.techs["reinforced_colony"].level == 1
+    assert loaded_tech_tree.techs["resource_storage"].level == 1

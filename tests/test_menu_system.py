@@ -1,5 +1,6 @@
 import pytest
-from cli.game.menu_system import MenuSystem, MenuOption, MainMenuOption, OptionsMenuOption
+from unittest.mock import MagicMock, patch
+from cli.game.menu_system import MenuSystem, MenuOption, MainMenuOption, OptionsMenuOption, TechTreeOption
 from cli.game.game_state import GameState, Resources, Colony
 from cli.game.audio_service import AudioService, SoundEffect
 from typing import List
@@ -260,3 +261,65 @@ def test_difficulty_settings():
     assert first_change != second_change
     assert any("Difficulty set to" in narration for narration in audio.narrations)
     assert all(diff in [1, 2, 3] for diff in [initial_difficulty, first_change, second_change])
+
+@patch('cli.game.save_system.load_tech_tree')
+def test_tech_tree_menu(mock_load_tech_tree):
+    """Test that the tech tree menu displays correctly"""
+    # Arrange
+    audio = MockAudioService()
+    game_state = GameState(
+        colony=Colony(hp=100, max_hp=100),
+        resources=Resources(energy=50, metal=30, food=20),
+        audio=audio
+    )
+    menu = MenuSystem(game_state, audio)
+    menu.show_main_menu()
+    
+    # Setup mock
+    mock_tech_tree = MagicMock()
+    mock_tech_tree.available_points = 42
+    mock_load_tech_tree.return_value = mock_tech_tree
+    
+    # Navigate to TECH_TREE option
+    while menu.main_menu_options[menu.current_index] != MainMenuOption.TECH_TREE:
+        menu.navigate_down()
+    
+    # Act
+    menu.select_current_option()
+    
+    # Assert
+    assert menu.current_menu == "tech_tree"
+    assert any("Tech Tree" in narration for narration in audio.narrations)
+    assert any("42 tech points" in narration for narration in audio.narrations)
+
+@patch('cli.game.save_system.load_tech_tree')
+def test_tech_tree_category_navigation(mock_load_tech_tree):
+    """Test navigating to a tech category"""
+    # Arrange
+    audio = MockAudioService()
+    game_state = GameState(
+        colony=Colony(hp=100, max_hp=100),
+        resources=Resources(energy=50, metal=30, food=20),
+        audio=audio
+    )
+    menu = MenuSystem(game_state, audio)
+    
+    # Setup mock
+    from cli.game.tech_tree import PlayerTechTree, TechCategory
+    mock_tech_tree = PlayerTechTree()
+    mock_tech_tree.available_points = 50
+    mock_load_tech_tree.return_value = mock_tech_tree
+    
+    # Show tech tree menu
+    menu.show_tech_tree_menu()
+    
+    # Navigate to DEFENSE category
+    while menu.tech_tree_options[menu.current_index] != TechTreeOption.DEFENSE:
+        menu.navigate_down()
+    
+    # Act
+    menu.select_current_option()
+    
+    # Assert
+    assert menu.current_menu == "tech_category"
+    assert any("DEFENSE technologies" in narration for narration in audio.narrations)

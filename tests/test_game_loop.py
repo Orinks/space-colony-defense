@@ -1,5 +1,6 @@
 import pytest
 from typing import List
+from unittest.mock import MagicMock, patch
 from cli.game.game_loop import GameLoop
 from cli.game.audio_service import AudioService, SoundEffect
 from cli.game.enemy_wave import Enemy, EnemyType
@@ -14,13 +15,23 @@ class MockAudioService:
     
     def play_narration(self, text: str) -> None:
         self.narrations.append(text)
+    
+    def pause_speech(self) -> None:
+        pass
+    
+    def resume_speech(self) -> None:
+        pass
+    
+    def stop_speech(self) -> None:
+        pass
 
 def test_game_loop_initialization():
     # Arrange
     audio = MockAudioService()
     
     # Act
-    game = GameLoop(audio_service=audio)
+    with patch('cli.game.game_loop.load_tech_tree', return_value=None):
+        game = GameLoop(audio_service=audio)
     
     # Assert
     assert game.game_state is not None
@@ -32,7 +43,8 @@ def test_game_loop_initialization():
 def test_game_loop_wave_start():
     # Arrange
     audio = MockAudioService()
-    game = GameLoop(audio_service=audio)
+    with patch('cli.game.game_loop.load_tech_tree', return_value=None):
+        game = GameLoop(audio_service=audio)
     game.in_main_menu = False  # Exit main menu
     game.game_running = True   # Start the game
     
@@ -48,7 +60,8 @@ def test_game_loop_wave_start():
 def test_game_loop_player_movement():
     # Arrange
     audio = MockAudioService()
-    game = GameLoop(audio_service=audio)
+    with patch('cli.game.game_loop.load_tech_tree', return_value=None):
+        game = GameLoop(audio_service=audio)
     game.in_main_menu = False  # Exit main menu
     game.game_running = True   # Start the game
     initial_position = game.turret.position
@@ -63,7 +76,8 @@ def test_game_loop_player_movement():
 def test_game_loop_player_shooting():
     # Arrange
     audio = MockAudioService()
-    game = GameLoop(audio_service=audio)
+    with patch('cli.game.game_loop.load_tech_tree', return_value=None):
+        game = GameLoop(audio_service=audio)
     game.in_main_menu = False  # Exit main menu
     game.game_running = True   # Start the game
     game.start_wave()  # Ensure there are enemies
@@ -78,7 +92,8 @@ def test_game_loop_player_shooting():
 def test_game_loop_wave_completion():
     # Arrange
     audio = MockAudioService()
-    game = GameLoop(audio_service=audio)
+    with patch('cli.game.game_loop.load_tech_tree', return_value=None):
+        game = GameLoop(audio_service=audio)
     game.in_main_menu = False  # Exit main menu
     game.game_running = True   # Start the game
     game.start_wave()
@@ -97,7 +112,8 @@ def test_game_loop_wave_completion():
 def test_game_loop_management_phase_end():
     # Arrange
     audio = MockAudioService()
-    game = GameLoop(audio_service=audio)
+    with patch('cli.game.game_loop.load_tech_tree', return_value=None):
+        game = GameLoop(audio_service=audio)
     game.in_main_menu = False  # Exit main menu
     game.game_running = True   # Start the game
     game.is_management_phase = True  # Directly set management phase
@@ -114,23 +130,27 @@ def test_game_loop_management_phase_end():
 def test_game_loop_game_over():
     # Arrange
     audio = MockAudioService()
-    game = GameLoop(audio_service=audio)
-    game.in_main_menu = False  # Exit main menu
-    game.game_running = True   # Start the game
-    
-    # Act - set colony health to 0 to trigger game over
-    game.game_state.colony.hp = 0
-    game.update()
-    
-    # Assert
-    assert game.is_game_over is True
-    assert SoundEffect.ACTION_FAIL in audio.played_sounds
-    assert any("Game Over" in narration for narration in audio.narrations)
+    with patch('cli.game.game_loop.load_tech_tree', return_value=None):
+        with patch('cli.game.game_loop.save_tech_tree') as mock_save:
+            game = GameLoop(audio_service=audio)
+            game.in_main_menu = False  # Exit main menu
+            game.game_running = True   # Start the game
+            
+            # Act - set colony health to 0 to trigger game over
+            game.game_state.colony.hp = 0
+            game.update()
+            
+            # Assert
+            assert game.is_game_over is True
+            assert SoundEffect.ACTION_FAIL in audio.played_sounds
+            assert any("Game Over" in narration for narration in audio.narrations)
+            mock_save.assert_called_once()
 
 def test_game_loop_full_wave_sequence():
     # Arrange
     audio = MockAudioService()
-    game = GameLoop(audio_service=audio)
+    with patch('cli.game.game_loop.load_tech_tree', return_value=None):
+        game = GameLoop(audio_service=audio)
     game.in_main_menu = False  # Exit main menu
     game.game_running = True   # Start the game
     
@@ -149,3 +169,42 @@ def test_game_loop_full_wave_sequence():
     assert game.is_wave_complete is False
     assert game.is_management_phase is False
     assert len(game.enemies) > 0  # Wave 2 has enemies
+
+def test_game_loop_loads_tech_tree():
+    """Test that the game loop loads the tech tree on initialization"""
+    # Arrange
+    from cli.game.tech_tree import PlayerTechTree
+    
+    # Mock the load_tech_tree function to return a specific tech tree
+    mock_tech_tree = PlayerTechTree()
+    mock_tech_tree.available_points = 42
+    
+    with patch('cli.game.game_loop.load_tech_tree', return_value=mock_tech_tree):
+        # Act
+        game = GameLoop()
+        
+        # Assert
+        assert hasattr(game, 'tech_tree')
+        assert game.tech_tree.available_points == 42
+
+def test_game_over_saves_tech_points():
+    """Test that game over adds tech points to the tech tree"""
+    # Arrange
+    audio = MockAudioService()
+    
+    with patch('cli.game.game_loop.load_tech_tree') as mock_load:
+        from cli.game.tech_tree import PlayerTechTree
+        mock_tech_tree = PlayerTechTree()
+        mock_tech_tree.available_points = 10
+        mock_load.return_value = mock_tech_tree
+        
+        with patch('cli.game.game_loop.save_tech_tree') as mock_save:
+            game = GameLoop(audio_service=audio)
+            game.game_state.tech_points = 15
+            
+            # Act
+            game.game_over()
+            
+            # Assert
+            assert game.tech_tree.available_points == 25  # 10 + 15
+            mock_save.assert_called_once_with(game.tech_tree)

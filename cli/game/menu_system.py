@@ -18,6 +18,7 @@ class MenuOption(Enum):
 class MainMenuOption(Enum):
     NEW_GAME = auto()
     LOAD_GAME = auto()
+    TECH_TREE = auto()  # Add tech tree option
     OPTIONS = auto()
     EXIT = auto()
 
@@ -27,6 +28,14 @@ class OptionsMenuOption(Enum):
     NARRATION_TOGGLE = auto()
     TOGGLE_SPEECH_MODE = auto()
     DIFFICULTY = auto()
+    BACK = auto()
+    
+    
+class TechTreeOption(Enum):
+    DEFENSE = auto()
+    WEAPONS = auto()
+    ECONOMY = auto() 
+    SPECIAL = auto()
     BACK = auto()
 
 
@@ -53,8 +62,10 @@ class MenuSystem:
         self.main_menu_options = list(MainMenuOption)
         self.options_menu_options = list(OptionsMenuOption)
         self.build_menu_options = list(BuildMenuOption)
-        self.current_menu = "game"  # Can be "main", "game", "options", "build", or "load_game"
+        self.tech_tree_options = list(TechTreeOption)
+        self.current_menu = "game"  # Can be "main", "game", "options", "build", "tech_tree", "tech_category" or "load_game"
         self.save_files = []  # List of save files when in load_game menu
+        self.category_techs = []  # List of techs in a category when in tech_category menu
 
         # Load difficulty settings from config
         try:
@@ -68,52 +79,70 @@ class MenuSystem:
             print("Config module not available, using default difficulty level")
         
         # Screen reader settings - get from audio service if possible
-        from cli.game.pygame_interface import PygameAudioService
-        if isinstance(self.audio, PygameAudioService):
-            self.use_running_screen_reader = self.audio.using_running_screen_reader
-            print(f"Using screen reader mode from PygameAudioService: {self.use_running_screen_reader}")
-        else:
-            # Try to load from config directly
-            try:
-                from cli.game.config import get_audio_config
-                audio_config = get_audio_config()
-                self.use_running_screen_reader = audio_config.get("use_running_screen_reader", True)
-                print(f"Loaded screen reader mode from config: {self.use_running_screen_reader}")
-            except ImportError:
-                # Config module not available, use default
-                self.use_running_screen_reader = True
-                print("Config module not available, defaulting screen reader mode to True")
+        try:
+            from cli.game.pygame_interface import PygameAudioService
+            if isinstance(self.audio, PygameAudioService):
+                self.use_running_screen_reader = self.audio.using_running_screen_reader
+                print(f"Using screen reader mode from PygameAudioService: {self.use_running_screen_reader}")
+            else:
+                # Try to load from config directly
+                try:
+                    from cli.game.config import get_audio_config
+                    audio_config = get_audio_config()
+                    self.use_running_screen_reader = audio_config.get("use_running_screen_reader", True)
+                    print(f"Loaded screen reader mode from config: {self.use_running_screen_reader}")
+                except ImportError:
+                    # Config module not available, use default
+                    self.use_running_screen_reader = True
+                    print("Config module not available, defaulting screen reader mode to True")
+        except ImportError:
+            # pygame_interface not available, use default
+            self.use_running_screen_reader = True
+            print("pygame_interface not available, defaulting screen reader mode to True")
 
     def navigate_up(self) -> None:
         if self.current_menu == "main":
             self.current_index = (self.current_index - 1) % len(self.main_menu_options)
         elif self.current_menu == "options":
-            self.current_index = (self.current_index - 1) % len(
-                self.options_menu_options
-            )
+            self.current_index = (self.current_index - 1) % len(self.options_menu_options)
         elif self.current_menu == "build":
-            self.current_index = (self.current_index - 1) % len(
-                self.build_menu_options
-            )
+            self.current_index = (self.current_index - 1) % len(self.build_menu_options)
         elif self.current_menu == "load_game":
             self.current_index = (self.current_index - 1) % (len(self.save_files) + 1)  # +1 for Back option
+        elif self.current_menu == "tech_tree":
+            self.current_index = (self.current_index - 1) % len(self.tech_tree_options)
+        elif self.current_menu == "tech_category":
+            self.current_index = (self.current_index - 1) % len(self.category_techs)
         else:  # game menu
             self.current_index = (self.current_index - 1) % len(self.options)
+        self._announce_current_option()
+
+    def show_tech_tree_menu(self) -> None:
+        """Show the tech tree menu"""
+        self.current_menu = "tech_tree"
+        self.current_index = 0
+        self.tech_tree_options = list(TechTreeOption)
+        
+        # Load tech tree
+        from cli.game.save_system import load_tech_tree
+        self.tech_tree = load_tech_tree()
+        
+        self.audio.play_narration(f"Tech Tree. You have {self.tech_tree.available_points} tech points available.")
         self._announce_current_option()
 
     def navigate_down(self) -> None:
         if self.current_menu == "main":
             self.current_index = (self.current_index + 1) % len(self.main_menu_options)
         elif self.current_menu == "options":
-            self.current_index = (self.current_index + 1) % len(
-                self.options_menu_options
-            )
+            self.current_index = (self.current_index + 1) % len(self.options_menu_options)
         elif self.current_menu == "build":
-            self.current_index = (self.current_index + 1) % len(
-                self.build_menu_options
-            )
+            self.current_index = (self.current_index + 1) % len(self.build_menu_options)
         elif self.current_menu == "load_game":
             self.current_index = (self.current_index + 1) % (len(self.save_files) + 1)  # +1 for Back option
+        elif self.current_menu == "tech_tree":
+            self.current_index = (self.current_index + 1) % len(self.tech_tree_options)
+        elif self.current_menu == "tech_category":
+            self.current_index = (self.current_index + 1) % len(self.category_techs)
         else:  # game menu
             self.current_index = (self.current_index + 1) % len(self.options)
         self._announce_current_option()
@@ -128,6 +157,11 @@ class MenuSystem:
             return self._handle_build_menu_selection()
         elif self.current_menu == "load_game":
             return self._handle_load_game_selection()
+        elif self.current_menu == "tech_tree":
+            return self._handle_tech_tree_selection()
+        elif self.current_menu == "tech_category":
+            self._handle_tech_category_selection()
+            return None
         else:  # game menu
             self._handle_game_menu_selection()
             return None
@@ -144,6 +178,11 @@ class MenuSystem:
         elif option == MainMenuOption.LOAD_GAME:
             self.audio.play_sound(SoundEffect.MENU_NAV)
             self.show_load_game_menu()
+            return None
+        elif option == MainMenuOption.TECH_TREE:
+            self.audio.play_sound(SoundEffect.MENU_NAV)
+            self.audio.play_narration("Tech Tree")
+            self.show_tech_tree_menu()
             return None
         elif option == MainMenuOption.OPTIONS:
             self.audio.play_sound(SoundEffect.MENU_NAV)
@@ -281,6 +320,94 @@ class MenuSystem:
             return f"load_slot_{self.current_index}"
             
         return None
+
+    def _handle_tech_tree_selection(self) -> Optional[str]:
+        """Handle selection in the tech tree menu"""
+        option = self.tech_tree_options[self.current_index]
+        
+        if option == TechTreeOption.BACK:
+            self.audio.play_sound(SoundEffect.MENU_NAV)
+            self.audio.play_narration("Returning to main menu")
+            self.current_menu = "main"
+            self.current_index = 0
+            return None
+            
+        # Show category-specific tech upgrades
+        from cli.game.tech_tree import TechCategory
+        category_map = {
+            TechTreeOption.DEFENSE: TechCategory.DEFENSE,
+            TechTreeOption.WEAPONS: TechCategory.WEAPONS,
+            TechTreeOption.ECONOMY: TechCategory.ECONOMY,
+            TechTreeOption.SPECIAL: TechCategory.SPECIAL,
+        }
+        
+        if option in category_map:
+            self._show_category_techs(category_map[option])
+            
+        return None
+
+    def _show_category_techs(self, category) -> None:
+        """Show techs in a specific category"""
+        self.current_menu = "tech_category"
+        self.current_index = 0
+        
+        # Filter techs by category
+        self.category_techs = [
+            tech for tech_id, tech in self.tech_tree.techs.items()
+            if tech.category == category
+        ]
+        
+        # Add a "Back" option
+        self.category_techs.append(None)  # None represents "Back"
+        
+        self.audio.play_narration(f"{category.name} technologies")
+        self._announce_current_tech_option()
+
+    def _handle_tech_category_selection(self) -> None:
+        """Handle selection in a tech category menu"""
+        if self.current_index >= len(self.category_techs):
+            return
+            
+        tech = self.category_techs[self.current_index]
+        
+        if tech is None:
+            # Back option
+            self.audio.play_sound(SoundEffect.MENU_NAV)
+            self.current_menu = "tech_tree"
+            self.current_index = 0
+            self._announce_current_option()
+            return
+            
+        # Try to purchase the tech
+        current_level = tech.level
+        if self.tech_tree.purchase_tech(tech.id, self.tech_tree.available_points):
+            self.tech_tree.available_points -= tech.get_cost(current_level)
+            self.audio.play_sound(SoundEffect.ACTION_SUCCESS)
+            self.audio.play_narration(f"Purchased {tech.name} level {tech.level}")
+            
+            # Save tech tree
+            from cli.game.save_system import save_tech_tree
+            save_tech_tree(self.tech_tree)
+        else:
+            self.audio.play_sound(SoundEffect.ACTION_FAIL)
+            
+            # Explain why purchase failed
+            if tech.level >= tech.max_level:
+                self.audio.play_narration(f"{tech.name} is already at maximum level")
+            elif self.tech_tree.available_points < tech.get_cost(tech.level):
+                self.audio.play_narration(f"Not enough tech points. You need {tech.get_cost(tech.level)}")
+            else:
+                # Check prerequisites
+                missing_prereqs = [
+                    prereq_id for prereq_id in tech.prerequisites
+                    if prereq_id not in self.tech_tree.owned_techs or self.tech_tree.owned_techs[prereq_id] < 1
+                ]
+                
+                if missing_prereqs:
+                    prereq_names = [self.tech_tree.techs[prereq_id].name for prereq_id in missing_prereqs]
+                    self.audio.play_narration(f"Missing prerequisites: {', '.join(prereq_names)}")
+                else:
+                    self.audio.play_narration("Cannot purchase this technology")
 
     def _handle_game_menu_selection(self) -> None:
         """Handle selection in the game menu"""
@@ -435,15 +562,20 @@ class MenuSystem:
                 )
             elif option == OptionsMenuOption.TOGGLE_SPEECH_MODE:
                 # Check if we're in pygame mode
-                from cli.game.pygame_interface import PygameAudioService
-                if isinstance(self.audio, PygameAudioService):
-                    # Get current state
-                    current_state = self.audio.using_running_screen_reader
-                    state_desc = "using running screen reader" if current_state else "using direct speech"
-                    self.audio.play_narration(
-                        f"{option.name.lower().replace('_', ' ')}. Currently {state_desc}"
-                    )
-                else:
+                try:
+                    from cli.game.pygame_interface import PygameAudioService
+                    if isinstance(self.audio, PygameAudioService):
+                        # Get current state
+                        current_state = self.audio.using_running_screen_reader
+                        state_desc = "using running screen reader" if current_state else "using direct speech"
+                        self.audio.play_narration(
+                            f"{option.name.lower().replace('_', ' ')}. Currently {state_desc}"
+                        )
+                    else:
+                        self.audio.play_narration(
+                            f"{option.name.lower().replace('_', ' ')}"
+                        )
+                except ImportError:
                     self.audio.play_narration(
                         f"{option.name.lower().replace('_', ' ')}"
                     )
@@ -497,6 +629,13 @@ class MenuSystem:
                     return
             
             self.audio.play_narration(option_name)
+        elif self.current_menu == "tech_tree":
+            option = self.tech_tree_options[self.current_index]
+            self.audio.play_narration(
+                f"{option.name.lower().replace('_', ' ')}"
+            )
+        elif self.current_menu == "tech_category":
+            self._announce_current_tech_option()
         elif self.current_menu == "load_game":
             # If selected "Back" option
             if self.current_index == len(self.save_files):
@@ -585,3 +724,22 @@ class MenuSystem:
     def get_difficulty(self) -> int:
         """Return the current difficulty setting"""
         return self.difficulty_level
+
+    def _announce_current_tech_option(self) -> None:
+        """Announce the current tech option"""
+        if self.current_index >= len(self.category_techs):
+            return
+            
+        tech = self.category_techs[self.current_index]
+        
+        if tech is None:
+            self.audio.play_narration("Back to tech categories")
+            return
+            
+        # Announce tech details
+        level_text = f"Level {tech.level}/{tech.max_level}" if tech.level > 0 else "Not purchased"
+        cost_text = f"Cost: {tech.get_cost(tech.level)} tech points" if tech.level < tech.max_level else "Maximum level"
+        
+        self.audio.play_narration(
+            f"{tech.name}. {level_text}. {tech.description}. {cost_text}"
+        )

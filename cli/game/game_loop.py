@@ -4,7 +4,7 @@ from cli.game.game_state import GameState, Resources, Colony
 from cli.game.enemy_wave import generate_wave, EnemyType, Enemy
 from cli.game.audio_service import AudioService, SoundEffect
 from cli.game.menu_system import MenuSystem
-from cli.game.save_system import save_game, load_game, auto_save, list_save_files, get_save_info
+from cli.game.save_system import save_game, load_game, auto_save, list_save_files, get_save_info, save_tech_tree, load_tech_tree
 from cli.game.config import save_config, load_config
 
 
@@ -17,6 +17,10 @@ class GameLoop:
         
         # Initialize menu system first to load configuration
         self.menu = MenuSystem(None, self.audio)  # Temporarily pass None for game_state
+        
+        # Load tech tree
+        from cli.game.tech_tree import PlayerTechTree
+        self.tech_tree = load_tech_tree() or PlayerTechTree()
         
         # Now reset the game with the loaded configuration
         self.reset_game()
@@ -40,6 +44,14 @@ class GameLoop:
         # Initialize other game components
         self.enemies: List[Enemy] = []
         self.projectiles: List[Projectile] = []
+        
+        # Store initial enemies for retreat calculations
+        self.initial_enemies = []
+        self.initial_enemies_count = 0
+        
+        # Apply tech tree effects to the new game state
+        if hasattr(self, 'tech_tree'):
+            self.tech_tree.apply_tech_effects(self.game_state)
         
         # Update menu system with the new game state
         if hasattr(self, 'menu'):
@@ -96,6 +108,15 @@ class GameLoop:
     def start_wave(self) -> None:
         """Start a new wave of enemies"""
         self.enemies = generate_wave(self.game_state.wave)
+        
+        # Store initial enemies for retreat calculations
+        self.initial_enemies = self.enemies.copy()
+        self.initial_enemies_count = len(self.enemies)
+        
+        # Reset wave tracking in game state
+        self.game_state.total_enemies_in_wave = len(self.enemies)
+        self.game_state.enemies_defeated_in_current_wave = 0
+        
         self.is_wave_complete = False
         self.is_management_phase = False
         self.audio.play_narration(
@@ -132,7 +153,14 @@ class GameLoop:
         if len(self.enemies) == 0 and not self.is_wave_complete:
             self.is_wave_complete = True
             self.audio.play_sound(SoundEffect.ACTION_SUCCESS)
-            self.audio.play_narration(f"Wave {self.game_state.wave} complete!")
+            
+            # Award tech points for completing the wave
+            self.game_state.complete_wave()
+            
+            # Check if it was a boss wave (every 5 waves)
+            if self.game_state.wave % 5 == 0:
+                self.game_state.defeat_boss()
+                
             self.start_management_phase()  # Immediately start management phase
 
         # Check for game over
@@ -159,6 +187,8 @@ class GameLoop:
                     ):
                         # Remove enemy
                         self.enemies.remove(enemy)
+                        # Increment defeated enemies counter
+                        self.game_state.enemies_defeated_in_current_wave += 1
                         # Play hit sound
                         self.audio.play_sound(SoundEffect.ENEMY_HIT)
                         # Collect resources from enemy
@@ -172,6 +202,8 @@ class GameLoop:
                     ):
                         # Remove enemy
                         self.enemies.remove(enemy)
+                        # Increment defeated enemies counter
+                        self.game_state.enemies_defeated_in_current_wave += 1
                         # Play hit sound
                         self.audio.play_sound(SoundEffect.ENEMY_HIT)
                         # Collect resources from enemy
@@ -352,6 +384,15 @@ class GameLoop:
                 self.audio.play_narration("Missile destroyed all enemies!")
         elif action == "status":
             self.menu.query_status()
+        elif action == "retreat" and not self.is_wave_complete:
+            # Set values for calculation
+            self.game_state.total_enemies_in_wave = self.initial_enemies_count
+            self.game_state.enemies_defeated_in_current_wave = self.initial_enemies_count - len(self.enemies)
+            
+            # Process retreat
+            self.game_state.retreat()
+            self.is_wave_complete = True
+            self.start_management_phase()
         elif action == "menu":
             self.in_main_menu = True
             self.game_running = False
@@ -366,6 +407,16 @@ class GameLoop:
         self.audio.play_narration(
             f"Game Over! Your colony was destroyed on wave {self.game_state.wave}. You earned {self.game_state.tech_points} tech points."
         )
+        
+        # Add tech points to persistent tech tree
+        if hasattr(self, 'tech_tree'):
+            self.tech_tree.available_points += self.game_state.tech_points
+            save_tech_tree(self.tech_tree)
+            
+            # Announce total tech points
+            self.audio.play_narration(
+                f"You now have {self.tech_tree.available_points} total tech points available."
+            )
         
     def save_configuration(self) -> None:
         """Save all configuration settings before exiting"""
