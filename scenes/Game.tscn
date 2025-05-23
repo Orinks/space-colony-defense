@@ -1,0 +1,148 @@
+[gd_scene load_steps=2 format=3]
+
+[ext_resource type="Script" path="res://scenes/Game.gd" id="1_2yjmx"]
+
+[node name="Game" type="Node2D"]
+script = ExtResource("1_2yjmx")
+
+[node name="Turret" type="Node2D" parent="."]
+position = Vector2(400, 550)
+
+[node name="Enemies" type="Node2D" parent="."]
+
+[node name="Projectiles" type="Node2D" parent="."]
+
+[node name="Buildings" type="Node2D" parent="."]
+
+[node name="UI" type="CanvasLayer" parent="."]
+
+[node name="ResourcesPanel" type="Panel" parent="UI"]
+offset_left = 10.0
+offset_top = 10.0
+offset_right = 210.0
+offset_bottom = 90.0
+
+[node name="EnergyLabel" type="Label" parent="UI/ResourcesPanel"]
+layout_mode = 0
+offset_left = 10.0
+offset_top = 10.0
+offset_right = 190.0
+offset_bottom = 36.0
+text = "Energy: 0"
+
+[node name="MetalLabel" type="Label" parent="UI/ResourcesPanel"]
+layout_mode = 0
+offset_left = 10.0
+offset_top = 36.0
+offset_right = 190.0
+offset_bottom = 62.0
+text = "Metal: 0"
+
+[node name="FoodLabel" type="Label" parent="UI/ResourcesPanel"]
+layout_mode = 0
+offset_left = 10.0
+offset_top = 62.0
+offset_right = 190.0
+offset_bottom = 88.0
+text = "Food: 0"
+
+[node name="ColonyPanel" type="Panel" parent="UI"]
+offset_left = 590.0
+offset_top = 10.0
+offset_right = 790.0
+offset_bottom = 50.0
+
+[node name="ColonyLabel" type="Label" parent="UI/ColonyPanel"]
+layout_mode = 0
+offset_left = 10.0
+offset_top = 10.0
+offset_right = 190.0
+offset_bottom = 36.0
+text = "Colony: 100/100"
+
+[node name="WavePanel" type="Panel" parent="UI"]
+offset_left = 350.0
+offset_top = 10.0
+offset_right = 450.0
+offset_bottom = 50.0
+
+[node name="WaveLabel" type="Label" parent="UI/WavePanel"]
+layout_mode = 0
+offset_left = 10.0
+offset_top = 10.0
+offset_right = 90.0
+offset_bottom = 36.0
+text = "Wave: 1"
+
+[node name="ShieldPanel" type="Panel" parent="UI"]
+offset_left = 590.0
+offset_top = 60.0
+offset_right = 790.0
+offset_bottom = 100.0
+
+[node name="ShieldLabel" type="Label" parent="UI/ShieldPanel"]
+layout_mode = 0
+offset_left = 10.0
+offset_top = 10.0
+offset_right = 190.0
+offset_bottom = 36.0
+text = "Shield: 100%"
+
+[node name="PauseMenu" type="Panel" parent="UI"]
+visible = false
+anchors_preset = 8
+anchor_left = 0.5
+anchor_top = 0.5
+anchor_right = 0.5
+anchor_bottom = 0.5
+offset_left = -150.0
+offset_top = -125.0
+offset_right = 150.0
+offset_bottom = 125.0
+grow_horizontal = 2
+grow_vertical = 2
+
+[node name="Label" type="Label" parent="UI/PauseMenu"]
+layout_mode = 1
+anchors_preset = 5
+anchor_left = 0.5
+anchor_right = 0.5
+offset_left = -46.0
+offset_top = 20.0
+offset_right = 46.0
+offset_bottom = 46.0
+grow_horizontal = 2
+text = "Game Paused"
+
+[node name="ManagementMenu" type="Panel" parent="UI"]
+visible = false
+anchors_preset = 8
+anchor_left = 0.5
+anchor_top = 0.5
+anchor_right = 0.5
+anchor_bottom = 0.5
+offset_left = -200.0
+offset_top = -200.0
+offset_right = 200.0
+offset_bottom = 200.0
+grow_horizontal = 2
+grow_vertical = 2
+
+[node name="Label" type="Label" parent="UI/ManagementMenu"]
+layout_mode = 1
+anchors_preset = 5
+anchor_left = 0.5
+anchor_right = 0.5
+offset_left = -92.5
+offset_top = 20.0
+offset_right = 92.5
+offset_bottom = 46.0
+grow_horizontal = 2
+text = "Management Phase"
+
+[node name="WaveTimer" type="Timer" parent="."]
+wait_time = 3.0
+one_shot = true
+
+[node name="EnemySpawnTimer" type="Timer" parent="."]
+wait_time = 2.0

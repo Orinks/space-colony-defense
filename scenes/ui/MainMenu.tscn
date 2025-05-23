@@ -1,0 +1,218 @@
+[gd_scene load_steps=2 format=3]
+
+[ext_resource type="Script" path="res://scenes/ui/MainMenu.gd" id="1_3yjmx"]
+
+[node name="MainMenu" type="Control"]
+layout_mode = 3
+anchors_preset = 15
+anchor_right = 1.0
+anchor_bottom = 1.0
+grow_horizontal = 2
+grow_vertical = 2
+script = ExtResource("1_3yjmx")
+
+[node name="Background" type="ColorRect" parent="."]
+layout_mode = 1
+anchors_preset = 15
+anchor_right = 1.0
+anchor_bottom = 1.0
+grow_horizontal = 2
+grow_vertical = 2
+color = Color(0.0980392, 0.0980392, 0.152941, 1)
+
+[node name="Title" type="Label" parent="."]
+layout_mode = 1
+anchors_preset = 5
+anchor_left = 0.5
+anchor_right = 0.5
+offset_left = -150.0
+offset_top = 100.0
+offset_right = 150.0
+offset_bottom = 150.0
+grow_horizontal = 2
+theme_override_font_sizes/font_size = 32
+text = "Space Colony Defense"
+horizontal_alignment = 1
+
+[node name="MenuOptions" type="VBoxContainer" parent="."]
+layout_mode = 1
+anchors_preset = 8
+anchor_left = 0.5
+anchor_top = 0.5
+anchor_right = 0.5
+anchor_bottom = 0.5
+offset_left = -100.0
+offset_top = -70.0
+offset_right = 100.0
+offset_bottom = 130.0
+grow_horizontal = 2
+grow_vertical = 2
+theme_override_constants/separation = 20
+
+[node name="NewGameButton" type="Button" parent="MenuOptions"]
+layout_mode = 2
+focus_neighbor_top = NodePath("../QuitButton")
+focus_neighbor_bottom = NodePath("../LoadGameButton")
+theme_override_font_sizes/font_size = 20
+text = "New Game"
+
+[node name="LoadGameButton" type="Button" parent="MenuOptions"]
+layout_mode = 2
+focus_neighbor_top = NodePath("../NewGameButton")
+focus_neighbor_bottom = NodePath("../OptionsButton")
+theme_override_font_sizes/font_size = 20
+text = "Load Game"
+
+[node name="OptionsButton" type="Button" parent="MenuOptions"]
+layout_mode = 2
+focus_neighbor_top = NodePath("../LoadGameButton")
+focus_neighbor_bottom = NodePath("../QuitButton")
+theme_override_font_sizes/font_size = 20
+text = "Options"
+
+[node name="QuitButton" type="Button" parent="MenuOptions"]
+layout_mode = 2
+focus_neighbor_top = NodePath("../OptionsButton")
+focus_neighbor_bottom = NodePath("../NewGameButton")
+theme_override_font_sizes/font_size = 20
+text = "Quit"
+
+[node name="OptionsMenu" type="Panel" parent="."]
+visible = false
+layout_mode = 1
+anchors_preset = 8
+anchor_left = 0.5
+anchor_top = 0.5
+anchor_right = 0.5
+anchor_bottom = 0.5
+offset_left = -200.0
+offset_top = -200.0
+offset_right = 200.0
+offset_bottom = 200.0
+grow_horizontal = 2
+grow_vertical = 2
+
+[node name="Title" type="Label" parent="OptionsMenu"]
+layout_mode = 1
+anchors_preset = 5
+anchor_left = 0.5
+anchor_right = 0.5
+offset_left = -50.0
+offset_top = 20.0
+offset_right = 50.0
+offset_bottom = 46.0
+grow_horizontal = 2
+text = "Options"
+horizontal_alignment = 1
+
+[node name="OptionsContainer" type="VBoxContainer" parent="OptionsMenu"]
+layout_mode = 1
+anchors_preset = 8
+anchor_left = 0.5
+anchor_top = 0.5
+anchor_right = 0.5
+anchor_bottom = 0.5
+offset_left = -150.0
+offset_top = -100.0
+offset_right = 150.0
+offset_bottom = 100.0
+grow_horizontal = 2
+grow_vertical = 2
+theme_override_constants/separation = 15
+
+[node name="SoundEffectsButton" type="Button" parent="OptionsMenu/OptionsContainer"]
+layout_mode = 2
+focus_neighbor_top = NodePath("../BackButton")
+text = "Sound Effects: On"
+
+[node name="NarrationButton" type="Button" parent="OptionsMenu/OptionsContainer"]
+layout_mode = 2
+text = "Narration: On"
+
+[node name="ScreenReaderButton" type="Button" parent="OptionsMenu/OptionsContainer"]
+layout_mode = 2
+text = "Screen Reader: Running"
+
+[node name="SoundVolumeButton" type="Button" parent="OptionsMenu/OptionsContainer"]
+layout_mode = 2
+text = "Sound Volume: 100%"
+
+[node name="NarrationVolumeButton" type="Button" parent="OptionsMenu/OptionsContainer"]
+layout_mode = 2
+text = "Narration Volume: 100%"
+
+[node name="SpeechRateButton" type="Button" parent="OptionsMenu/OptionsContainer"]
+layout_mode = 2
+text = "Speech Rate: 150"
+
+[node name="DifficultyButton" type="Button" parent="OptionsMenu/OptionsContainer"]
+layout_mode = 2
+text = "Difficulty: 1"
+
+[node name="BackButton" type="Button" parent="OptionsMenu/OptionsContainer"]
+layout_mode = 2
+focus_neighbor_bottom = NodePath("../SoundEffectsButton")
+text = "Back"
+
+[node name="LoadGameMenu" type="Panel" parent="."]
+visible = false
+layout_mode = 1
+anchors_preset = 8
+anchor_left = 0.5
+anchor_top = 0.5
+anchor_right = 0.5
+anchor_bottom = 0.5
+offset_left = -200.0
+offset_top = -200.0
+offset_right = 200.0
+offset_bottom = 200.0
+grow_horizontal = 2
+grow_vertical = 2
+
+[node name="Title" type="Label" parent="LoadGameMenu"]
+layout_mode = 1
+anchors_preset = 5
+anchor_left = 0.5
+anchor_right = 0.5
+offset_left = -50.0
+offset_top = 20.0
+offset_right = 50.0
+offset_bottom = 46.0
+grow_horizontal = 2
+text = "Load Game"
+horizontal_alignment = 1
+
+[node name="SavesList" type="VBoxContainer" parent="LoadGameMenu"]
+layout_mode = 1
+anchors_preset = 8
+anchor_left = 0.5
+anchor_top = 0.5
+anchor_right = 0.5
+anchor_bottom = 0.5
+offset_left = -150.0
+offset_top = -100.0
+offset_right = 150.0
+offset_bottom = 100.0
+grow_horizontal = 2
+grow_vertical = 2
+theme_override_constants/separation = 10
+
+[node name="NoSavesLabel" type="Label" parent="LoadGameMenu/SavesList"]
+layout_mode = 2
+text = "No save files found."
+horizontal_alignment = 1
+
+[node name="BackButton" type="Button" parent="LoadGameMenu"]
+layout_mode = 1
+anchors_preset = 7
+anchor_left = 0.5
+anchor_top = 1.0
+anchor_right = 0.5
+anchor_bottom = 1.0
+offset_left = -50.0
+offset_top = -60.0
+offset_right = 50.0
+offset_bottom = -20.0
+grow_horizontal = 2
+grow_vertical = 0
+text = "Back"
