@@ -1,18 +1,18 @@
 # Space Colony Defense
 
-An accessible space colony defense game built with Godot 4.5+. Features comprehensive TTS integration with screen reader support, wave-based combat, resource management, and full keyboard navigation for players with visual impairments.
+Space Colony Defense is a space colony defense game built with Godot 4.5+ that includes TTS integration, screen reader support, wave-based combat, resource management, and keyboard navigation.
 
 ## 🚧 Current Development Status
 
 **This project is currently in early development.** The Godot implementation currently features:
 - ✅ Complete TTS and screen reader integration system
-- ✅ Comprehensive accessibility audio system with fallback support
+- ✅ Audio system with fallback support
 - ✅ Options menu with screen reader mode toggle
 - ✅ Save/load configuration system
 - ✅ Automated testing suite (11 passing tests)
 - ⚠️ **Basic UI implementation** - most game mechanics described below are planned features
 
-> **Note**: This README contains the planned feature set. The project was recently migrated from a Python implementation to Godot 4.5+, and many game mechanics are still being implemented. The current focus has been on building a robust accessibility foundation.
+> **Note**: This README contains the planned feature set. The project was recently migrated from a Python implementation to Godot 4.5+, and many game mechanics are still being implemented. The current focus has been on TTS and screen reader systems.
 
 ## Project Overview
 
@@ -20,7 +20,7 @@ Space Colony Defense will combine fast-paced, wave-based shooting with resource 
 
 ## Accessibility Features
 
-This game is designed with accessibility as a core feature. **Currently implemented:**
+**Currently implemented:**
 
 - ✅ **Screen Reader Integration**: Automatic TTS disabling when screen reader mode is enabled to prevent conflicts
 - ✅ **Multi-Platform TTS Support**: Godot's built-in TTS with OS-specific fallbacks (Windows PowerShell, macOS say, Linux espeak)
@@ -89,7 +89,7 @@ The following game mechanics are planned for implementation:
 The project includes a comprehensive test suite using the Gut testing framework:
 
 - **11 passing tests** covering TTS and screen reader integration
-- **Automated testing** for accessibility features
+- **Automated testing** for TTS and screen reader features
 - **Test coverage** for audio system, screen reader mode, and configuration management
 
 To run tests:
@@ -108,11 +108,11 @@ To run tests:
 
 ## Contributing
 
-This project prioritizes accessibility and welcomes contributions, especially:
+Contributions are welcome, especially:
 - Accessibility testing and feedback
 - Screen reader compatibility improvements
 - Audio design and implementation
 - Game mechanics implementation
 - Documentation improvements
 
-The codebase includes comprehensive comments and follows accessibility-first design principles.
+The codebase includes comprehensive comments.
