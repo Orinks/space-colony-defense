@@ -1,6 +1,6 @@
 # Space Colony Defense
 
-Space Colony Defense is a space colony defense game built with Godot 4.5+ that includes TTS integration, screen reader support, wave-based combat, resource management, and keyboard navigation.
+Space Colony Defense is an audio game for blind and visually impaired players, built with Godot 4.5+ that includes TTS integration, screen reader support, wave-based combat, resource management, and keyboard navigation.
 
 ## 🚧 Current Development Status
 
